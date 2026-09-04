@@ -10,7 +10,7 @@
   // Stamped at deploy time by build/make-deploy.mjs and build/bundle-single.mjs.
   // Left as the placeholder when running straight from app/, so the Settings
   // screen can honestly say "dev" rather than invent a version.
-  const BUILD = "2026-09-04 09:14 · a95b9e0";
+  const BUILD = "2026-09-04 09:24 · 31d70a2";
 
   // The single-file build inlines its data and has no server behind it, which
   // changes two things: no service worker, and no working file downloads.
@@ -721,7 +721,10 @@
       r.box = Math.min(INTERVALS.length - 1, r.box + 1);
       s.correct++; s.streak++;
       s.bestStreak = Math.max(s.bestStreak, s.streak);
-      if (s.mode === 'quick') {
+      // Any timed mode scores. This was pinned to the literal 'quick' from before
+      // the other modes existed, so Capitals, Lookalikes and Zoom banked nothing
+      // while the results screen still showed a score — which was always zero.
+      if (modeOf(s.mode).timed) {
         const speed = Math.max(0, 1 - ms / QUESTION_MS);
         s.score += 100 + Math.round(100 * speed) + Math.max(0, s.streak - 2) * 10;
       }

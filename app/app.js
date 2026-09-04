@@ -721,7 +721,10 @@
       r.box = Math.min(INTERVALS.length - 1, r.box + 1);
       s.correct++; s.streak++;
       s.bestStreak = Math.max(s.bestStreak, s.streak);
-      if (s.mode === 'quick') {
+      // Any timed mode scores. This was pinned to the literal 'quick' from before
+      // the other modes existed, so Capitals, Lookalikes and Zoom banked nothing
+      // while the results screen still showed a score — which was always zero.
+      if (modeOf(s.mode).timed) {
         const speed = Math.max(0, 1 - ms / QUESTION_MS);
         s.score += 100 + Math.round(100 * speed) + Math.max(0, s.streak - 2) * 10;
       }
