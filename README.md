@@ -38,6 +38,28 @@ mastery has to be re-earned rather than being a one-off lucky guess.
 Review intervals per box: immediate · 10 min · 1 day · 3 days · 7 days ·
 21 days · 60 days.
 
+## The other modes
+
+All five share one engine. Every question kind still resolves to *four flag
+records, one of which is right*, so grading, the Leitner schedule and every
+statistic work identically no matter what is being asked. Only the prompt and
+what is printed on the buttons change (`KINDS` in `app/app.js`).
+
+**Capitals** — flag → capital city, or capital → flag via the flip toggle. Uses
+the capital already carried in the dataset, so it is a second knowledge domain
+for no new data. Only entries that actually have a capital are eligible.
+
+**Lookalikes** — drawn only from flags with a catalogued twin, and the wrong
+answers come from that twin list first. The confusable table already existed to
+season the distractors; this makes it the whole round. Cruel distractors are
+forced on, so that toggle is hidden.
+
+**Zoom out** — opens at 5.5x on a random point and pulls back over the question,
+easing so it opens quickly then settles. Answering early is worth more.
+Deliberately *not* deeper than 5.5x and the origin is held near the middle: a
+hard zoom into the corner of a plain stripe is a blank rectangle, which is not a
+question. On answering, it snaps to the full flag so you see what it was.
+
 ---
 
 ## Packs

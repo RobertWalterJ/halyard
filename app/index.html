@@ -72,6 +72,31 @@
       </button>
     </div>
 
+    <h2 class="section-label">More ways to play</h2>
+    <div class="modes small">
+      <button class="mode compact" data-go="setup-capitals">
+        <span class="mode-ico">
+          <svg viewBox="0 0 24 24" aria-hidden="true"><path d="M12 21s7-6.2 7-11a7 7 0 1 0-14 0c0 4.8 7 11 7 11Z"/><circle cx="12" cy="10" r="2.6"/></svg>
+        </span>
+        <span class="mode-txt"><b>Capitals</b><i>Match the flag to its capital city</i></span>
+        <span class="mode-go" aria-hidden="true">›</span>
+      </button>
+      <button class="mode compact" data-go="setup-lookalikes">
+        <span class="mode-ico">
+          <svg viewBox="0 0 24 24" aria-hidden="true"><rect x="3" y="5" width="9" height="7" rx="1.5"/><rect x="12" y="12" width="9" height="7" rx="1.5"/></svg>
+        </span>
+        <span class="mode-txt"><b>Lookalikes</b><i>Only flags with a genuine twin</i></span>
+        <span class="mode-go" aria-hidden="true">›</span>
+      </button>
+      <button class="mode compact" data-go="setup-zoom">
+        <span class="mode-ico">
+          <svg viewBox="0 0 24 24" aria-hidden="true"><circle cx="10.5" cy="10.5" r="6.5"/><path d="M15.4 15.4 21 21M8 10.5h5"/></svg>
+        </span>
+        <span class="mode-txt"><b>Zoom out</b><i>Starts on one detail and pulls back</i></span>
+        <span class="mode-go" aria-hidden="true">›</span>
+      </button>
+    </div>
+
     <nav class="tiles">
       <button data-go="progress">
         <svg viewBox="0 0 24 24" aria-hidden="true"><path d="M3 20h18M6 20v-6M11 20V8M16 20v-9M21 20V5"/></svg>
@@ -126,11 +151,11 @@
 
     <fieldset class="group">
       <legend>Options</legend>
-      <label class="row-toggle">
+      <label class="row-toggle" id="optHardRow">
         <span><b>Cruel distractors</b><i>Wrong answers chosen to look like the real flag</i></span>
         <input type="checkbox" id="optHard">
       </label>
-      <label class="row-toggle">
+      <label class="row-toggle" id="optReverseRow">
         <span><b>Name → flag</b><i>Show the country name, pick the flag</i></span>
         <input type="checkbox" id="optReverse">
       </label>
@@ -161,6 +186,7 @@
   <div class="stage">
     <div class="flag-card" id="flagCard"></div>
     <p class="prompt-name" id="promptName" hidden></p>
+    <p class="ask-line" id="askLine" hidden></p>
     <div class="time-bar" id="timeBar" hidden
          role="timer" aria-label="Time remaining this question">
       <div class="time-bar-fill" id="timeBarFill"></div>

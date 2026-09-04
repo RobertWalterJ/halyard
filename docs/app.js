@@ -10,7 +10,7 @@
   // Stamped at deploy time by build/make-deploy.mjs and build/bundle-single.mjs.
   // Left as the placeholder when running straight from app/, so the Settings
   // screen can honestly say "dev" rather than invent a version.
-  const BUILD = "2026-09-04 08:58 · 0605bc8";
+  const BUILD = "2026-09-04 09:14 · a95b9e0";
 
   // The single-file build inlines its data and has no server behind it, which
   // changes two things: no service worker, and no working file downloads.
@@ -48,6 +48,49 @@
     countries: 'country', territories: 'territory',
     disputed: 'disputed', orgs: 'org', subnational: 'subdivision',
   };
+  // Every kind still resolves to "four flag records, one is right", so grading
+  // and the whole Leitner layer stay untouched. Only the prompt and what is
+  // printed on the buttons change.
+  const KINDS = {
+    'flag-name':    { prompt: 'flag',    option: 'name',    ask: null },
+    'name-flag':    { prompt: 'name',    option: 'flag',    ask: 'Which flag belongs to' },
+    'flag-capital': { prompt: 'flag',    option: 'capital', ask: 'What is its capital?' },
+    'capital-flag': { prompt: 'capital', option: 'flag',    ask: 'Which flag flies over' },
+    'zoom-name':    { prompt: 'zoom',    option: 'name',    ask: null },
+  };
+
+  const MODES = {
+    quick: {
+      id: 'quick', label: 'Quick Play', kind: 'flag-name', flip: 'name-flag',
+      flipLabel: 'Name → flag', flipHint: 'Show the country name, pick the flag',
+      timed: true, adaptive: false,
+      lede: 'A fixed round against the clock. Scored, and it still counts toward your progress.',
+    },
+    training: {
+      id: 'training', label: 'Training', kind: 'flag-name', flip: 'name-flag',
+      flipLabel: 'Name → flag', flipHint: 'Show the country name, pick the flag',
+      timed: false, adaptive: true,
+      lede: 'Untimed. Halyard picks what you are due to review and what you keep getting wrong.',
+    },
+    capitals: {
+      id: 'capitals', label: 'Capitals', kind: 'flag-capital', flip: 'capital-flag',
+      flipLabel: 'Capital → flag', flipHint: 'Show the capital, pick the flag',
+      timed: true, adaptive: false, needs: 'capital',
+      lede: 'Same flags, a different question. Only entries with a capital city appear.',
+    },
+    lookalikes: {
+      id: 'lookalikes', label: 'Lookalikes', kind: 'flag-name',
+      timed: true, adaptive: false, needs: 'near', forceHard: true,
+      lede: 'Only flags with a genuine twin, and every wrong answer is one you could actually mistake it for.',
+    },
+    zoom: {
+      id: 'zoom', label: 'Zoom out', kind: 'zoom-name',
+      timed: true, adaptive: false,
+      lede: 'Starts tight on one detail and pulls back. Answer as early as you dare.',
+    },
+  };
+  const modeOf = (id) => MODES[id] || MODES.quick;
+
   const REGIONS = ['Europe', 'Asia', 'Africa', 'Americas', 'Oceania'];
   const TIER_LABEL = { 1: 'Well known', 2: 'Middling', 3: 'Obscure' };
   const LENGTHS = [10, 20, 30, 50];
@@ -203,6 +246,14 @@
     });
   }
 
+  // Some modes cannot ask about every flag: Capitals needs a capital on record,
+  // Lookalikes needs at least one catalogued twin.
+  function eligible(p, mode) {
+    if (mode.needs === 'capital') return p.filter((f) => !!f.capital);
+    if (mode.needs === 'near') return p.filter((f) => f.near && f.near.length > 0);
+    return p;
+  }
+
   // ── question selection ──────────────────────────────────────────────────
   function pickQuestions(p, n, mode) {
     if (p.length === 0) return [];
@@ -259,6 +310,27 @@
     return chosen.slice(0, 3);
   }
 
+  // Lookalikes draws its wrong answers from the catalogued twins first, so the
+  // whole round is made of flags you could genuinely confuse.
+  function distractorsFor(f, p, mode) {
+    if (mode.id !== 'lookalikes') {
+      return distractors(f, p, mode.forceHard || store.settings.hard);
+    }
+    const byCode = new Map(p.map((x) => [x.code, x]));
+    const twins = (f.near || []).map((c) => byCode.get(c)).filter(Boolean);
+    const chosen = shuffle(twins.slice()).slice(0, 3);
+    if (chosen.length < 3) {
+      const have = new Set([f.code, ...chosen.map((x) => x.code)]);
+      const top = p.filter((x) => !have.has(x.code))
+        .map((x) => ({ x, s: similarity(f, x) }))
+        .sort((a, b) => b.s - a.s)
+        .slice(0, 3 - chosen.length)
+        .map((o) => o.x);
+      chosen.push(...top);
+    }
+    return chosen;
+  }
+
   // ── views ───────────────────────────────────────────────────────────────
   const VIEWS = ['home', 'setup', 'game', 'results', 'progress', 'browse', 'settings'];
   function show(name) {
@@ -269,8 +341,7 @@
 
   function go(dest) {
     if (dest === 'home') { stopTimer(); renderHome(); show('home'); }
-    else if (dest === 'setup-quick') { renderSetup('quick'); show('setup'); }
-    else if (dest === 'setup-training') { renderSetup('training'); show('setup'); }
+    else if (dest.startsWith('setup-')) { renderSetup(dest.slice(6)); show('setup'); }
     else if (dest === 'progress') { renderProgress(); show('progress'); }
     else if (dest === 'browse') { renderBrowse(); show('browse'); }
     else if (dest === 'settings') { renderSettings(); show('settings'); }
@@ -385,14 +456,23 @@
     return b;
   }
 
-  function renderSetup(mode) {
-    setupMode = mode;
+  function renderSetup(modeId) {
+    setupMode = modeId;
+    const mode = modeOf(modeId);
     const st = store.settings;
-    $('#setupTitle').textContent = mode === 'quick' ? 'Quick Play' : 'Training';
-    $('#setupLede').textContent = mode === 'quick'
-      ? 'A fixed round against the clock. Scored, and it still counts toward your progress.'
-      : 'Untimed. Halyard picks what you are due to review and what you keep getting wrong.';
+    $('#setupTitle').textContent = mode.label;
+    $('#setupLede').textContent = mode.lede;
     $('#lengthGroup').hidden = false;
+
+    // Cruel distractors is forced on where the mode is built from look-alikes.
+    $('#optHardRow').hidden = !!mode.forceHard;
+    // The flip only exists for modes that define one.
+    const flipRow = $('#optReverseRow');
+    flipRow.hidden = !mode.flip;
+    if (mode.flip) {
+      flipRow.querySelector('b').textContent = mode.flipLabel;
+      flipRow.querySelector('i').textContent = mode.flipHint;
+    }
 
     // packs
     const pl = $('#packList'); pl.innerHTML = '';
@@ -448,24 +528,32 @@
     $('#optHard').checked = st.hard;
     $('#optReverse').checked = st.reverse;
 
-    const p = pool();
+    const p = eligible(pool(), mode);
+    const note = mode.needs === 'capital' ? ' with capitals'
+      : mode.needs === 'near' ? ' with a look-alike' : '';
     $('#poolCount').textContent = p.length
-      ? `${p.length} flags in scope`
+      ? `${p.length} flags${note} in scope`
       : 'No flags match — widen the filters';
     $('#startBtn').disabled = p.length < 4;
     if (p.length > 0 && p.length < 4) $('#poolCount').textContent = `${p.length} flags — need at least 4`;
   }
 
   // ── game ────────────────────────────────────────────────────────────────
-  function startRound(mode) {
+  function startRound(modeId) {
+    const mode = modeOf(modeId);
     const st = store.settings;
-    const p = pool();
-    const n = mode === 'quick' ? st.length : Math.min(st.length, p.length);
-    const qs = pickQuestions(p, n, mode);
+    const p = eligible(pool(), mode);
+    if (p.length < 4) {
+      return toast(mode.needs === 'capital' ? 'Not enough flags with capitals in scope'
+        : mode.needs === 'near' ? 'Not enough look-alike flags in scope'
+        : 'Not enough flags in scope');
+    }
+    const n = mode.adaptive ? Math.min(st.length, p.length) : st.length;
+    const qs = pickQuestions(p, n, mode.adaptive ? 'training' : 'quick');
     if (qs.length < 1) return toast('Not enough flags in scope');
 
     session = {
-      mode, pool: p, qs, i: 0,
+      mode: mode.id, pool: p, qs, i: 0,
       correct: 0, streak: 0, bestStreak: 0, score: 0,
       misses: [], times: [], newlyMastered: [],
       t0: Date.now(), locked: false,
@@ -474,10 +562,20 @@
     renderQuestion();
   }
 
+  // What the buttons say for a given option, per question kind.
+  function optionLabel(o, kind) {
+    return KINDS[kind].option === 'capital' ? (o.capital || o.name) : o.name;
+  }
+
   function renderQuestion() {
     const s = session;
     const f = s.qs[s.i];
     const st = store.settings;
+    const mode = modeOf(s.mode);
+    // The flip toggle only applies to modes that define one.
+    const kind = (mode.flip && st.reverse) ? mode.flip : mode.kind;
+    const spec = KINDS[kind];
+    s.kind = kind;
     s.locked = false;
     s.qStart = Date.now();
 
@@ -495,46 +593,70 @@
 
     // Held on the session: a timeout grades the question with no click to
     // report, and still needs the options to mark up the right answer.
-    const opts = shuffle([f, ...distractors(f, s.pool, st.hard)]);
+    const opts = shuffle([f, ...distractorsFor(f, s.pool, mode)]);
     s.opts = opts;
+
     const card = $('#flagCard');
     const nameEl = $('#promptName');
+    const askEl = $('#askLine');
     const box = $('#answers');
     box.innerHTML = '';
 
-    if (st.reverse) {
-      // name → flag
-      card.hidden = true;
-      nameEl.hidden = false;
-      nameEl.innerHTML = '<small>Which flag belongs to</small>';
-      nameEl.appendChild(document.createTextNode(f.name));
-      for (const o of opts) {
-        const b = document.createElement('button');
+    // ── prompt ──
+    card.hidden = spec.prompt !== 'flag' && spec.prompt !== 'zoom';
+    nameEl.hidden = spec.prompt !== 'name' && spec.prompt !== 'capital';
+
+    if (spec.prompt === 'flag') {
+      card.innerHTML = flagMarkup(f.code);
+    } else if (spec.prompt === 'zoom') {
+      // Start hard in on a random detail and pull back over the question.
+      // Origin is kept near the middle and the opening scale modest: a deep zoom
+      // into the corner of a plain stripe shows a blank rectangle, which is not
+      // a question. Easing opens it quickly, then settles, so a uniform first
+      // frame resolves fast and answering early is still worth real points.
+      const zx = 35 + Math.random() * 30;
+      const zy = 35 + Math.random() * 30;
+      card.innerHTML = `<div class="zoomer">${flagMarkup(f.code)}</div>`;
+      const z = card.firstElementChild;
+      z.style.setProperty('--zx', zx.toFixed(1) + '%');
+      z.style.setProperty('--zy', zy.toFixed(1) + '%');
+      z.style.animation = `zoomOut ${QUESTION_MS}ms cubic-bezier(.3,.85,.4,1) forwards`;
+    } else {
+      nameEl.innerHTML = '';
+      if (spec.ask) {
+        const small = document.createElement('small');
+        small.textContent = spec.ask;
+        nameEl.appendChild(small);
+      }
+      nameEl.appendChild(document.createTextNode(
+        spec.prompt === 'capital' ? (f.capital || f.name) : f.name));
+    }
+
+    // A line stating the question where the prompt alone does not imply it.
+    const showAsk = spec.ask && spec.prompt === 'flag';
+    askEl.hidden = !showAsk;
+    if (showAsk) askEl.textContent = spec.ask;
+
+    // ── options ──
+    for (const o of opts) {
+      const b = document.createElement('button');
+      if (spec.option === 'flag') {
         b.className = 'ans flagged';
         b.innerHTML = flagMarkup(o.code);
         b.setAttribute('aria-label', o.name);
-        b.onclick = () => answer(o);
-        box.appendChild(b);
-      }
-    } else {
-      // flag → name
-      card.hidden = false;
-      nameEl.hidden = true;
-      card.innerHTML = flagMarkup(f.code);
-      for (const o of opts) {
-        const b = document.createElement('button');
+      } else {
         b.className = 'ans';
-        b.textContent = o.name;
-        b.onclick = () => answer(o);
-        box.appendChild(b);
+        b.textContent = optionLabel(o, kind);
       }
+      b.onclick = () => answer(o);
+      box.appendChild(b);
     }
 
-    if (s.mode === 'quick') {
+    if (mode.timed) {
       startTimer();
     } else {
       $('#timer').hidden = true;
-      $('#timeBar').hidden = true;   // Training is untimed
+      $('#timeBar').hidden = true;
     }
   }
 
@@ -582,6 +704,8 @@
     s.locked = true;
     stopTimer();
     $('#timer').hidden = true; // a frozen countdown reads as still running
+    const z = document.querySelector('#flagCard .zoomer');
+    if (z) { z.style.animation = 'none'; z.style.transform = 'scale(1)'; }
 
     const f = s.qs[s.i];
     const ms = Date.now() - s.qStart;
@@ -680,8 +804,9 @@
   function renderResults(entry) {
     const s = session;
     const acc = pct(entry.c, entry.n);
-    $('#resKicker').textContent = s.mode === 'quick' ? 'Quick Play' : 'Training';
-    if (s.mode === 'quick') {
+    const mode = modeOf(s.mode);
+    $('#resKicker').textContent = mode.label;
+    if (mode.timed) {
       $('#resScore').textContent = entry.score.toLocaleString();
       $('#resLine').textContent = `${entry.c} of ${entry.n} correct`;
     } else {
@@ -795,7 +920,7 @@
       el.className = 'sess';
       const when = new Date(s.t);
       el.innerHTML = `<div class="sl"><b></b><span></span></div><div class="sr"></div>`;
-      el.querySelector('b').textContent = s.mode === 'quick' ? 'Quick Play' : 'Training';
+      el.querySelector('b').textContent = modeOf(s.mode).label;
       el.querySelector('span').textContent =
         when.toLocaleDateString(undefined, { month: 'short', day: 'numeric' }) + ' · ' +
         when.toLocaleTimeString(undefined, { hour: 'numeric', minute: '2-digit' }) +
