@@ -91,6 +91,24 @@ const CONFUSABLE = [
   ['cl', 'cu', 'pr'],
   ['ch', 'dk', 'ga', 'tg'],
 ];
+// Flags that are indistinguishable *as drawn here*. The source set normalises
+// every flag to 4:3, so aspect ratio — the only thing separating some of these —
+// is not on screen. Two of them in one question is an unanswerable question, so
+// they are never offered together.
+//   id/mc  identical design, 2:3 vs 4:5 in life, reds differ by ~41/255
+//   ro/td  same tricolour; Chad's blue is darker but only by ~57 at phone size
+const IDENTICAL = [
+  ['id', 'mc'],
+  ['ro', 'td'],
+];
+const clashOf = new Map();
+for (const grp of IDENTICAL) {
+  for (const c of grp) {
+    if (!clashOf.has(c)) clashOf.set(c, new Set());
+    for (const o of grp) if (o !== c) clashOf.get(c).add(o);
+  }
+}
+
 const confusableOf = new Map();
 for (const grp of CONFUSABLE) {
   for (const c of grp) {
@@ -234,6 +252,7 @@ for (const file of svgFiles) {
     tier: null, // assigned by rank below
     colours: colourSig(raw),
     near: [...(confusableOf.get(code) || [])],
+    clash: [...(clashOf.get(code) || [])],
   };
   if (parent) rec.parent = parent;
   entries.push(rec);

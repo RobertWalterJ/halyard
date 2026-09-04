@@ -291,8 +291,26 @@
     return s;
   }
 
+  // Two flags that are indistinguishable as drawn must never share a question —
+  // that is not a hard question, it is one with two right-looking answers.
+  const clashes = (a, b) =>
+    (a.clash && a.clash.includes(b.code)) || (b.clash && b.clash.includes(a.code));
+
+  // Take the first n candidates that clash neither with the answer nor with
+  // anything already picked.
+  function takeCompatible(answer, candidates, n) {
+    const picked = [];
+    for (const c of candidates) {
+      if (picked.length >= n) break;
+      if (clashes(answer, c)) continue;
+      if (picked.some((x) => clashes(x, c))) continue;
+      picked.push(c);
+    }
+    return picked;
+  }
+
   function distractors(answer, p, hard) {
-    const others = p.filter((f) => f.code !== answer.code);
+    const others = p.filter((f) => f.code !== answer.code && !clashes(answer, f));
     if (others.length <= 3) return shuffle(others.slice()).slice(0, 3);
 
     const scored = others
@@ -301,12 +319,22 @@
 
     // Hard mode takes the nearest look-alikes. Normal mode takes a couple of
     // plausible ones plus a wildcard, so it does not become a colour puzzle.
-    if (hard) return scored.slice(0, 3).map((x) => x.f);
-    const near = scored.slice(0, Math.min(8, scored.length));
-    const chosen = shuffle(near).slice(0, 2).map((x) => x.f);
-    const pickedCodes = new Set([answer.code, ...chosen.map((f) => f.code)]);
-    const wild = shuffle(others.filter((f) => !pickedCodes.has(f.code)));
-    if (wild[0]) chosen.push(wild[0]);
+    if (hard) return takeCompatible(answer, scored.map((x) => x.f), 3);
+
+    // Two plausible options plus a wildcard, so it does not become a pure
+    // colour-matching puzzle. `fill` then tops the list back up to three from
+    // everything remaining, so clash-filtering can never leave a short question.
+    const near = scored.slice(0, Math.min(8, scored.length)).map((x) => x.f);
+    const chosen = takeCompatible(answer, shuffle(near), 2);
+    const fill = (candidates) => {
+      for (const c of candidates) {
+        if (chosen.length >= 3) return;
+        if (chosen.some((x) => x.code === c.code)) continue;
+        if (clashes(answer, c) || chosen.some((x) => clashes(x, c))) continue;
+        chosen.push(c);
+      }
+    };
+    fill(shuffle(others.slice()));
     return chosen.slice(0, 3);
   }
 
@@ -318,15 +346,15 @@
     }
     const byCode = new Map(p.map((x) => [x.code, x]));
     const twins = (f.near || []).map((c) => byCode.get(c)).filter(Boolean);
-    const chosen = shuffle(twins.slice()).slice(0, 3);
+    const chosen = takeCompatible(f, shuffle(twins.slice()), 3);
     if (chosen.length < 3) {
       const have = new Set([f.code, ...chosen.map((x) => x.code)]);
-      const top = p.filter((x) => !have.has(x.code))
+      const ranked = p.filter((x) => !have.has(x.code))
         .map((x) => ({ x, s: similarity(f, x) }))
         .sort((a, b) => b.s - a.s)
-        .slice(0, 3 - chosen.length)
-        .map((o) => o.x);
-      chosen.push(...top);
+        .map((o) => o.x)
+        .filter((x) => !chosen.some((c) => clashes(c, x)));
+      chosen.push(...takeCompatible(f, ranked, 3 - chosen.length));
     }
     return chosen;
   }
