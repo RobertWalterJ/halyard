@@ -7,6 +7,11 @@
   const KEY = 'halyard.v1';
   const $ = (s) => document.querySelector(s);
 
+  // Stamped at deploy time by build/make-deploy.mjs and build/bundle-single.mjs.
+  // Left as the placeholder when running straight from app/, so the Settings
+  // screen can honestly say "dev" rather than invent a version.
+  const BUILD = '__BUILD__';
+
   // The single-file build inlines its data and has no server behind it, which
   // changes two things: no service worker, and no working file downloads.
   const isSingleFile = !!document.getElementById('halyard-data');
@@ -828,8 +833,10 @@
     $('#dataNote').textContent =
       `${store.sessions.length} rounds · ${answered} answers · ${Object.keys(store.flags).length} flags touched. ` +
       `Progress is stored on this device only.`;
+    const stamped = BUILD !== ('__' + 'BUILD__');
     $('#aboutNote').innerHTML =
-      `Halyard · ${DATA.flags.length} flags<br>` +
+      `<b>Build ${stamped ? BUILD : 'dev (unstamped)'}</b><br>` +
+      `Halyard · ${DATA.flags.length} flags<br><br>` +
       `Flags: ${DATA.sources.flags}<br>` +
       `Countries: ${DATA.sources.countries}<br>` +
       `Population: ${DATA.sources.population}`;

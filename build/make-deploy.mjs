@@ -5,9 +5,10 @@
 // The individual app/flags/*.svg are deliberately left out: nothing references
 // them (the app reads the bundled data/flag-svgs.json), and they are ~1.9MB.
 // Re-runnable:  node build/make-deploy.mjs
-import { mkdirSync, copyFileSync, rmSync, readdirSync, statSync } from 'node:fs';
+import { mkdirSync, copyFileSync, rmSync, readdirSync, statSync, readFileSync, writeFileSync } from 'node:fs';
 import { join, dirname } from 'node:path';
 import { fileURLToPath } from 'node:url';
+import { buildStamp } from './stamp.mjs';
 
 const ROOT = join(dirname(fileURLToPath(import.meta.url)), '..');
 const APP = join(ROOT, 'app');
@@ -30,6 +31,7 @@ const FILES = [
 ];
 
 const targets = [join(ROOT, 'dist', 'web'), join(ROOT, 'docs')];
+const STAMP = buildStamp();
 
 let bytes = 0;
 for (const target of targets) {
@@ -39,6 +41,12 @@ for (const target of targets) {
     mkdirSync(dirname(dest), { recursive: true });
     copyFileSync(join(APP, rel), dest);
   }
+  // Stamp the copy, never the source in app/ — running locally should keep
+  // reporting "dev" rather than claiming to be whatever was last deployed.
+  const js = join(target, 'app.js');
+  const src = readFileSync(js, 'utf8');
+  if (!src.includes('__BUILD__')) throw new Error('build placeholder missing from app.js');
+  writeFileSync(js, src.replace("'__BUILD__'", JSON.stringify(STAMP)));
 }
 
 const walk = (d) => readdirSync(d).reduce((n, f) => {
@@ -52,6 +60,7 @@ bytes = walk(targets[0]);
 const swSrc = readdirSync(targets[0]).includes('sw.js');
 if (!swSrc) throw new Error('sw.js missing from the deploy');
 
+console.log('build stamp    :', STAMP);
 console.log('files per copy :', FILES.length);
 console.log('written        :', targets.map((t) => t.replace(ROOT + '\\', '')).join('  +  '));
 console.log('size           :', (bytes / 1024 / 1024).toFixed(2) + 'MB');

@@ -5,6 +5,7 @@
 import { readFileSync, writeFileSync, mkdirSync } from 'node:fs';
 import { join, dirname } from 'node:path';
 import { fileURLToPath } from 'node:url';
+import { buildStamp } from './stamp.mjs';
 
 const ROOT = join(dirname(fileURLToPath(import.meta.url)), '..');
 const APP = join(ROOT, 'app');
@@ -15,9 +16,14 @@ const read = (...p) => readFileSync(join(APP, ...p), 'utf8');
 
 const html = read('index.html');
 let css = read('styles.css');
-const js = read('app.js');
+let js = read('app.js');
 const flags = read('data', 'flags.json');
 const svgs = read('data', 'flag-svgs.json');
+
+// Stamp the build so the artifact copy also reports a real version.
+const STAMP = buildStamp();
+if (!js.includes('__BUILD__')) throw new Error('build placeholder missing from app.js');
+js = js.replace("'__BUILD__'", JSON.stringify(STAMP + ' (single-file)'));
 
 // Inline the self-hosted fonts. The single-file build has no server to fetch
 // them from, and the artifact CSP would block them from anywhere else.

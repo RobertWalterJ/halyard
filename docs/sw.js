@@ -5,7 +5,7 @@
    first time — you would keep running old code until the cache name changed.
    Network-first means the app is always current when the server is reachable
    and still works completely offline when it is not. */
-const CACHE = 'halyard-v4';
+const CACHE = 'halyard-v5';
 const ASSETS = [
   '.',
   'index.html',
