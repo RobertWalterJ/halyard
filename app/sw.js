@@ -5,7 +5,7 @@
    first time — you would keep running old code until the cache name changed.
    Network-first means the app is always current when the server is reachable
    and still works completely offline when it is not. */
-const CACHE = 'halyard-v11';
+const CACHE = 'halyard-v12';
 
 // Deliberately NOT listing data/packs/*.json here. The sub-national packs are
 // several megabytes and most people will never switch them on; precaching them
@@ -19,6 +19,7 @@ const ASSETS = [
   'manifest.webmanifest',
   'data/flags.json',
   'data/flag-svgs.json',
+  'data/map.json',
   'fonts/bricolage-latin.woff2',
   'fonts/bricolage-latin-ext.woff2',
   'fonts/instrument-latin.woff2',

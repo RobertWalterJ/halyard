@@ -21,6 +21,7 @@ const FILES = [
   'manifest.webmanifest',
   'data/flags.json',
   'data/flag-svgs.json',
+  'data/map.json',
   'fonts/bricolage-latin.woff2',
   'fonts/bricolage-latin-ext.woff2',
   'fonts/instrument-latin.woff2',

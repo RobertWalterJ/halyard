@@ -596,6 +596,30 @@ h1, h2, h3, p { margin: 0; }
   font-variant-numeric: tabular-nums;
 }
 
+/* ── mastery choropleth ──
+   Equal-area projection, so the shading is honest: area on screen is
+   proportional to area on the ground. */
+.map-wrap {
+  background: var(--paper); border: 1px solid var(--line);
+  border-radius: 14px; padding: 10px; flex: none;
+}
+/* aspect-ratio, not height:auto — an SVG contributes no intrinsic height inside
+   a flex column, so the wrapper collapsed to its padding and clipped the map. */
+#masteryMap {
+  width: 100%; height: auto; display: block;
+  aspect-ratio: 1000 / 487;
+}
+#masteryMap .c { stroke: #fff; stroke-width: 0.5; vector-effect: non-scaling-stroke; }
+.map-legend {
+  display: flex; align-items: center; gap: 8px; flex-wrap: wrap;
+  font-size: 0.72rem; color: var(--ink-3); padding: 0 2px;
+}
+.map-legend .sw {
+  width: 16px; height: 10px; border-radius: 3px; border: 1px solid var(--line);
+  display: inline-block; vertical-align: -1px; margin-right: 4px;
+}
+.map-legend span { display: inline-flex; align-items: center; }
+
 .sess-list { display: flex; flex-direction: column; gap: 8px; }
 .sess {
   display: flex; align-items: center; justify-content: space-between; gap: 10px;

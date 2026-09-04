@@ -10,7 +10,7 @@
   // Stamped at deploy time by build/make-deploy.mjs and build/bundle-single.mjs.
   // Left as the placeholder when running straight from app/, so the Settings
   // screen can honestly say "dev" rather than invent a version.
-  const BUILD = "2026-09-04 19:12 · 6297a68";
+  const BUILD = "2026-09-04 19:17 · 6051fc4";
 
   // The single-file build inlines its data and has no server behind it, which
   // changes two things: no service worker, and no working file downloads.
@@ -301,6 +301,62 @@
     } finally {
       loadingPacks = false;
     }
+  }
+
+  // The world map is only needed by the Progress screen, so it is fetched on
+  // first view rather than bundled into the boot path.
+  let MAP = null;
+  async function ensureMap() {
+    if (MAP) return MAP;
+    try {
+      const r = await fetch('data/map.json');
+      if (!r.ok) throw new Error('map ' + r.status);
+      MAP = await r.json();
+    } catch (err) {
+      console.warn('map load failed', err);
+      MAP = null;
+    }
+    return MAP;
+  }
+
+  // Five steps from "never met it" to "mastered", on the warm accent ramp.
+  const MASTERY_STEPS = [
+    { min: 0, fill: '#e4d9c6', label: 'not yet' },
+    { min: 1, fill: '#ffd884', label: 'seen' },
+    { min: 2, fill: '#ffbc1f', label: 'learning' },
+    { min: 3, fill: '#ee7d13', label: 'known' },
+    { min: 5, fill: '#b0450a', label: 'mastered' },
+  ];
+  const fillForBox = (box) => {
+    let f = MASTERY_STEPS[0].fill;
+    for (const s of MASTERY_STEPS) if (box >= s.min) f = s.fill;
+    return f;
+  };
+
+  async function renderMasteryMap() {
+    const svg = $('#masteryMap');
+    const legend = $('#mapLegend');
+    if (!svg) return;
+    const m = await ensureMap();
+    if (!m) { svg.closest('.map-wrap').hidden = true; legend.hidden = true; return; }
+    svg.setAttribute('viewBox', m.viewBox);
+
+    let out = '';
+    for (const [code, d] of Object.entries(m.paths)) {
+      const r = store.flags[code];
+      const box = r ? r.box : 0;
+      // A country only counts as "seen" once it has actually been answered.
+      const fill = r && r.n > 0 ? fillForBox(box) : MASTERY_STEPS[0].fill;
+      const f = BY.get(code);
+      out += `<path class="c" d="${d}" fill="${fill}"><title>${
+        (f ? f.name : code) + (r && r.n ? ` — ${pct(r.c, r.n)}% of ${r.n}` : ' — not seen yet')
+      }</title></path>`;
+    }
+    svg.innerHTML = out;
+
+    legend.hidden = false;
+    legend.innerHTML = MASTERY_STEPS.map((s) =>
+      `<span><i class="sw" style="background:${s.fill}"></i>${s.label}</span>`).join('');
   }
 
   const prettyBytes = (n) => (n >= 1048576 ? (n / 1048576).toFixed(1) + ' MB'
@@ -1056,6 +1112,7 @@
 
   // ── progress ────────────────────────────────────────────────────────────
   function renderProgress() {
+    renderMasteryMap();
     const ss = store.sessions;
     const answered = ss.reduce((a, s) => a + s.n, 0);
     const correct = ss.reduce((a, s) => a + s.c, 0);
