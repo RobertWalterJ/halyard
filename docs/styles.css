@@ -522,6 +522,34 @@ h1, h2, h3, p { margin: 0; }
 .ans.flagged { padding: 6px; }
 .ans.flagged svg { width: 100%; height: 100%; border-radius: 9px; display: block; }
 
+/* ── map answers ──
+   The four candidates are drawn on the map; everything else is context. The
+   view zooms to them, because at world scale a thumb-sized tap target covers
+   most of Europe. */
+.answers.map-answers { grid-template-columns: 1fr; padding-top: 4px; }
+/* The map is the question here, so the flag steps back and the stage stops
+   claiming the free space. */
+.game.map-mode .flag-card { max-width: 190px; }
+.game.map-mode .stage { flex: 0 1 auto; gap: 10px; padding-bottom: 2px; }
+/* Let the map take all the room that is left. The SVG keeps its own aspect via
+   preserveAspectRatio, so it centres inside whatever box it is given. */
+.game.map-mode .answers { flex: 1 1 auto; display: block; min-height: 0; }
+.game.map-mode .answer-map { width: 100%; height: 100%; aspect-ratio: auto; }
+.answer-map {
+  width: 100%; height: auto; display: block;
+  background: var(--paper); border: 1px solid var(--line-2);
+  border-radius: 14px; box-shadow: var(--shadow-sm);
+  touch-action: manipulation;
+}
+.answer-map .mo-base { fill: #ece2d2; stroke: #fff; stroke-width: 0.5; vector-effect: non-scaling-stroke; }
+.answer-map .mo-opt {
+  fill: var(--yellow); stroke: var(--orange-deep); stroke-width: 1.2;
+  vector-effect: non-scaling-stroke; cursor: pointer; transition: fill .15s;
+}
+.answer-map .mo-opt.right { fill: var(--good); stroke: #0d5c33; }
+.answer-map .mo-opt.wrong { fill: var(--bad); stroke: #8e211a; }
+.answer-map .mo-hit { fill: transparent; cursor: pointer; }
+
 /* ══════════ RESULTS ══════════ */
 .res-head { text-align: center; padding-top: 26px; }
 .res-kicker {

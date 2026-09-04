@@ -10,7 +10,7 @@
   // Stamped at deploy time by build/make-deploy.mjs and build/bundle-single.mjs.
   // Left as the placeholder when running straight from app/, so the Settings
   // screen can honestly say "dev" rather than invent a version.
-  const BUILD = "2026-09-04 19:17 · 6051fc4";
+  const BUILD = "2026-09-04 19:23 · dfc1d18";
 
   // The single-file build inlines its data and has no server behind it, which
   // changes two things: no service worker, and no working file downloads.
@@ -71,6 +71,9 @@
     // shown, so grading cannot assume the prompt flag is the answer.
     'flag-border':   { prompt: 'flag', option: 'fact', fact: 'name', border: true,
                        ask: 'Which country does it border?' },
+    // Options are drawn on the map instead of on buttons.
+    'flag-map':      { prompt: 'flag', option: 'map', fact: 'name',
+                       ask: 'Find it on the map' },
   };
 
   // What Quick Play and Training can mix within a single round.
@@ -82,6 +85,7 @@
     { kind: 'flag-border', label: 'Borders' },
     { kind: 'flag-currency', label: 'Currency' },
     { kind: 'flag-demonym', label: 'People' },
+    { kind: 'flag-map', label: 'On the map' },
   ];
 
   const MODES = {
@@ -497,9 +501,10 @@
     const seen = new Set([String(want)]);
     // Names get the similarity-ranked distractors; other facts just need three
     // options whose value genuinely differs, or the question has two right answers.
-    const candidates = spec.fact === 'name'
-      ? distractorsFor(f, p, mode)
-      : shuffle(p.slice());
+    const mappable = spec.option === 'map' ? p.filter((x) => MAP && MAP.paths[x.code]) : p;
+    const candidates = spec.option === 'map'
+      ? shuffle(mappable.slice())
+      : (spec.fact === 'name' ? distractorsFor(f, p, mode) : shuffle(p.slice()));
     const picked = [];
     for (const c of candidates) {
       if (picked.length >= 3) break;
@@ -520,6 +525,12 @@
     if (spec.border) {
       const neigh = (f.borders || []).filter((c) => p.some((q) => q.code === c));
       return neigh.length > 0 && p.length >= 5;
+    }
+    if (spec.option === 'map') {
+      // Natural Earth 110m has no geometry for microstates, so they cannot be
+      // asked about on the map at all.
+      if (!MAP || !MAP.paths[f.code]) return false;
+      return p.filter((x) => MAP.paths[x.code]).length >= 4;
     }
     const factName = spec.fact || spec.promptFact;
     if (FACTS[factName](f) == null) return false;
@@ -806,6 +817,8 @@
         : mode.needs === 'near' ? 'Not enough look-alike flags in scope'
         : 'Not enough flags in scope');
     }
+    // The map has to be in hand before a map question can render.
+    if (mode.mix && (st.kinds || []).includes('flag-map')) await ensureMap();
     const n = mode.adaptive ? Math.min(st.length, p.length) : st.length;
     const qs = pickQuestions(p, n, mode.adaptive ? 'training' : 'quick');
     if (qs.length < 1) return toast('Not enough flags in scope');
@@ -869,7 +882,9 @@
     const nameEl = $('#promptName');
     const askEl = $('#askLine');
     const box = $('#answers');
+    box.className = 'answers';
     box.innerHTML = '';
+    $('#view-game').classList.remove('map-mode');
 
     // ── prompt ──
     card.hidden = spec.prompt !== 'flag' && spec.prompt !== 'zoom';
@@ -907,6 +922,13 @@
     if (showAsk) askEl.textContent = spec.ask;
 
     // ── options ──
+    if (spec.option === 'map') {
+      $('#view-game').classList.add('map-mode');   // shrink the flag, grow the map
+      renderMapOptions(box, opts);
+      if (mode.timed) { startTimer(); } else { $('#timer').hidden = true; $('#timeBar').hidden = true; }
+      return;
+    }
+
     for (const o of opts) {
       const b = document.createElement('button');
       if (spec.option === 'flag') {
@@ -926,6 +948,65 @@
     } else {
       $('#timer').hidden = true;
       $('#timeBar').hidden = true;
+    }
+  }
+
+  // Draw the four candidates on the map and let them be tapped. The view zooms
+  // to the candidates: at world scale a 44px tap target is the size of Europe,
+  // so picking a small country would be impossible on a phone.
+  function renderMapOptions(box, opts) {
+    const m = MAP;
+    box.className = 'answers map-answers';
+    box.innerHTML = '';
+    if (!m) return;
+
+    const codes = opts.map((o) => o.code);
+    const boxes = codes.map((c) => m.bboxes[c]).filter(Boolean);
+    let x0 = Math.min(...boxes.map((b) => b[0]));
+    let y0 = Math.min(...boxes.map((b) => b[1]));
+    let x1 = Math.max(...boxes.map((b) => b[2]));
+    let y1 = Math.max(...boxes.map((b) => b[3]));
+
+    // Pad, keep a sane minimum span, and stay inside the world.
+    const padX = Math.max((x1 - x0) * 0.18, 30);
+    const padY = Math.max((y1 - y0) * 0.18, 30);
+    x0 -= padX; x1 += padX; y0 -= padY; y1 += padY;
+    const MINSPAN = 180;
+    if (x1 - x0 < MINSPAN) { const c = (x0 + x1) / 2; x0 = c - MINSPAN / 2; x1 = c + MINSPAN / 2; }
+    const aspect = 1.7;                       // wider than tall reads better here
+    let w = x1 - x0, h = y1 - y0;
+    if (w / h < aspect) { const c = (y0 + y1) / 2; h = w / aspect; y0 = c - h / 2; y1 = c + h / 2; }
+    else { const c = (x0 + x1) / 2; w = h * aspect; x0 = c - w / 2; x1 = c + w / 2; }
+    x0 = Math.max(0, x0); y0 = Math.max(0, y0);
+    x1 = Math.min(m.width, x1); y1 = Math.min(m.height, y1);
+
+    const chosen = new Set(codes);
+    let out = '';
+    for (const [code, d] of Object.entries(m.paths)) {
+      if (chosen.has(code)) continue;
+      out += `<path class="mo-base" d="${d}"/>`;
+    }
+    for (const o of opts) {
+      out += `<path class="mo-opt" data-code="${o.code}" d="${m.paths[o.code]}"/>`;
+    }
+    // A generous invisible disc over each candidate, so tiny countries are still
+    // reachable with a thumb.
+    for (const o of opts) {
+      const c = m.centroids[o.code];
+      if (!c) continue;
+      out += `<circle class="mo-hit" data-code="${o.code}" cx="${c[0]}" cy="${c[1]}" r="${Math.max(10, (x1 - x0) * 0.045)}"/>`;
+    }
+
+    box.innerHTML =
+      `<svg class="answer-map" viewBox="${x0.toFixed(1)} ${y0.toFixed(1)} ${(x1 - x0).toFixed(1)} ${(y1 - y0).toFixed(1)}"
+            role="group" aria-label="Tap the country on the map">${out}</svg>`;
+
+    const svg = box.firstElementChild;
+    for (const el of svg.querySelectorAll('[data-code]')) {
+      el.addEventListener('click', () => {
+        const o = opts.find((x) => x.code === el.dataset.code);
+        if (o) answer(o);
+      });
     }
   }
 
@@ -1016,8 +1097,23 @@
 
     // feedback
     const opts = s.opts;
+
+    // Map questions colour the shapes rather than buttons.
+    if (KINDS[kindOfSession()].option === 'map') {
+      const svg = $('#answers').querySelector('svg');
+      if (svg) {
+        for (const el of svg.querySelectorAll('.mo-opt')) {
+          const code = el.dataset.code;
+          if (code === (s.correctCode || f.code)) el.classList.add('right');
+          else if (choice && code === choice.code) el.classList.add('wrong');
+        }
+        for (const el of svg.querySelectorAll('.mo-hit')) el.style.pointerEvents = 'none';
+      }
+    }
+
     const buttons = [...$('#answers').children];
     buttons.forEach((b, idx) => {
+      if (!opts[idx]) return;          // map questions have one <svg>, not buttons
       b.disabled = true;
       const o = opts[idx];
       if (o.code === (s.correctCode || f.code)) b.classList.add('correct');

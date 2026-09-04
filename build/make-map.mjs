@@ -96,17 +96,46 @@ const round = (n) => Math.round(n * 10) / 10;
 function pathFor(geom) {
   const polys = geom.type === 'Polygon' ? [geom.arcs] : geom.arcs;
   let d = '';
+  // Track the largest ring so the marker lands on the mainland rather than
+  // halfway to a distant island (France would otherwise sit near Guiana).
+  let best = { area: -1, cx: 0, cy: 0 };
+  let minX2 = Infinity, maxX2 = -Infinity, minY2 = Infinity, maxY2 = -Infinity;
+
   for (const poly of polys) {
     for (const ringIdx of poly) {
       const pts = ring(ringIdx).map(([lon, lat]) => toXY(lon, lat));
       if (pts.length < 3) continue;
       d += 'M' + pts.map(([x, y]) => `${round(x)} ${round(y)}`).join('L') + 'Z';
+
+      let a = 0, cx = 0, cy = 0;
+      for (let i = 0; i < pts.length; i++) {
+        const [x0, y0] = pts[i];
+        const [x1, y1] = pts[(i + 1) % pts.length];
+        const f = x0 * y1 - x1 * y0;
+        a += f; cx += (x0 + x1) * f; cy += (y0 + y1) * f;
+      }
+      a /= 2;
+      const abs = Math.abs(a);
+      if (abs > best.area && abs > 0) best = { area: abs, cx: cx / (6 * a), cy: cy / (6 * a) };
+      for (const [x, y] of pts) {
+        if (x < minX2) minX2 = x; if (x > maxX2) maxX2 = x;
+        if (y < minY2) minY2 = y; if (y > maxY2) maxY2 = y;
+      }
     }
   }
-  return d;
+  return {
+    d,
+    centroid: best.area > 0 ? [round(best.cx), round(best.cy)] : null,
+    // bbox lets the map question zoom to just the candidates, which is the only
+    // way tapping a small country is possible on a phone.
+    bbox: minX2 === Infinity ? null
+      : [round(minX2), round(minY2), round(maxX2), round(maxY2)],
+  };
 }
 
 const paths = {};
+const centroids = {};
+const bboxes = {};
 const skipped = [];
 // Natural Earth carries a few territories with no ISO numeric id at all.
 // Kosovo has one in our data (xk, in the Disputed pack), so match it by name.
@@ -116,11 +145,16 @@ for (const geom of topo.objects.countries.geometries) {
   const cca2 = ccn3ToCca2.get(String(geom.id).padStart(3, '0'))
     || BY_NAME[geom.properties?.name];
   if (!cca2) { skipped.push(geom.properties?.name || geom.id); continue; }
-  const d = pathFor(geom);
-  if (d) paths[cca2] = d;
+  const r = pathFor(geom);
+  if (r.d) {
+    paths[cca2] = r.d;
+    if (r.centroid) centroids[cca2] = r.centroid;
+    if (r.bbox) bboxes[cca2] = r.bbox;
+  }
 }
 
-const out = { viewBox: `0 0 ${W} ${H}`, width: W, height: H, projection: 'Equal Earth', paths };
+const out = { viewBox: `0 0 ${W} ${H}`, width: W, height: H, projection: 'Equal Earth',
+              paths, centroids, bboxes };
 const body = JSON.stringify(out);
 writeFileSync(join(OUT, 'map.json'), body);
 
