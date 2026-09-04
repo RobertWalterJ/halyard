@@ -28,6 +28,7 @@
     reverse: false,
     haptics: true,
     auto: true,
+    sound: true,
   };
 
   // Leitner intervals per box, in ms. Box 0 is always due.
@@ -67,6 +68,103 @@
   const pct = (n, d) => (d ? Math.round((n / d) * 100) : 0);
   const dayKey = (t) => { const d = new Date(t); return `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}-${String(d.getDate()).padStart(2, '0')}`; };
   const buzz = (ms) => { if (store.settings.haptics && navigator.vibrate) { try { navigator.vibrate(ms); } catch {} } };
+
+  // ── sound ───────────────────────────────────────────────────────────────
+  // Synthesised, not sampled: no audio files to ship, nothing to cache, works
+  // offline, and every parameter stays tunable. A streak walks up a pentatonic
+  // scale so consecutive correct answers audibly build, and drops back on a miss.
+  const SFX = (() => {
+    let ctx = null, master = null, noise = null;
+    const ROOT = 523.25;                                  // C5
+    const LADDER = [0, 2, 4, 7, 9, 12, 14, 16, 19, 21, 24, 26];
+
+    function init() {
+      if (ctx) return ctx;
+      const AC = window.AudioContext || window.webkitAudioContext;
+      if (!AC) return null;
+      ctx = new AC();
+      master = ctx.createGain();
+      master.gain.value = 0.9;
+      master.connect(ctx.destination);
+      // one reusable noise buffer for the attack transients
+      const n = Math.floor(ctx.sampleRate * 0.2);
+      noise = ctx.createBuffer(1, n, ctx.sampleRate);
+      const d = noise.getChannelData(0);
+      for (let i = 0; i < n; i++) d[i] = Math.random() * 2 - 1;
+      return ctx;
+    }
+
+    // Browsers only allow audio to start from a user gesture, so every call
+    // goes through here and resumes a context suspended by autoplay policy.
+    function ready() {
+      if (!store || store.settings.sound === false) return null;
+      const c = init();
+      if (!c) return null;
+      if (c.state === 'suspended') c.resume().catch(() => {});
+      return c;
+    }
+
+    function tone(freq, { gain = 0.2, dur = 0.18, delay = 0, bend = 0, type = 'sine' } = {}) {
+      const c = ready(); if (!c) return;
+      const t = c.currentTime + delay;
+      const o = c.createOscillator();
+      const g = c.createGain();
+      o.type = type;
+      o.frequency.setValueAtTime(freq * (1 + bend), t);
+      if (bend) o.frequency.exponentialRampToValueAtTime(freq, t + dur * 0.6);
+      // exponential ramps cannot reach zero, hence the small floor
+      g.gain.setValueAtTime(0.0001, t);
+      g.gain.exponentialRampToValueAtTime(gain, t + 0.004);
+      g.gain.exponentialRampToValueAtTime(0.0001, t + dur);
+      o.connect(g); g.connect(master);
+      o.start(t); o.stop(t + dur + 0.02);
+    }
+
+    // The crisp part: a few milliseconds of band-passed noise as the attack.
+    function click({ gain = 0.08, freq = 2800, dur = 0.016, delay = 0 } = {}) {
+      const c = ready(); if (!c) return;
+      const t = c.currentTime + delay;
+      const s = c.createBufferSource(); s.buffer = noise;
+      const bp = c.createBiquadFilter();
+      bp.type = 'bandpass'; bp.frequency.value = freq; bp.Q.value = 1.3;
+      const g = c.createGain();
+      g.gain.setValueAtTime(gain, t);
+      g.gain.exponentialRampToValueAtTime(0.0001, t + dur);
+      s.connect(bp); bp.connect(g); g.connect(master);
+      s.start(t); s.stop(t + dur + 0.01);
+    }
+
+    return {
+      unlock() { ready(); },
+      tap() { click({ gain: 0.05, freq: 3200, dur: 0.012 }); },
+      correct(streak) {
+        const step = LADDER[Math.min(Math.max(streak - 1, 0), LADDER.length - 1)];
+        const f = ROOT * Math.pow(2, step / 12);
+        click({ gain: 0.07, freq: 3400, dur: 0.014 });
+        tone(f, { gain: 0.26, dur: 0.19, bend: 0.03 });
+        tone(f * 2.01, { gain: 0.09, dur: 0.09, delay: 0.005 });  // brightness
+      },
+      wrong() {
+        click({ gain: 0.05, freq: 800, dur: 0.02 });
+        tone(150, { gain: 0.2, dur: 0.17, bend: 0.28 });
+      },
+      finish() {
+        [0, 4, 7, 12].forEach((s, i) =>
+          tone(ROOT * Math.pow(2, s / 12), { gain: 0.19, dur: 0.32, delay: i * 0.09 }));
+      },
+    };
+  })();
+
+  // Brief full-screen wash on the verdict. Safe here in a way a timer tint is
+  // not: the answer is already locked, so it cannot colour what you are judging.
+  function flash(kind) {
+    const v = $('#view-game');
+    if (!v) return;
+    v.classList.remove('flash-good', 'flash-bad');
+    void v.offsetWidth;                       // restart the animation
+    v.classList.add(kind === 'good' ? 'flash-good' : 'flash-bad');
+    setTimeout(() => v.classList.remove('flash-good', 'flash-bad'), 460);
+  }
 
   function toast(msg, ms = 1900) {
     const t = $('#toast');
@@ -382,8 +480,13 @@
     $('#qProgFill').style.width = `${(s.i / s.qs.length) * 100}%`;
 
     const sb = $('#streakBadge');
-    if (s.streak >= 3) { sb.hidden = false; sb.textContent = `${s.streak} in a row`; }
-    else sb.hidden = true;
+    if (s.streak >= 3) {
+      sb.hidden = false;
+      sb.textContent = `${s.streak} in a row`;
+      sb.classList.remove('bump'); void sb.offsetWidth; sb.classList.add('bump');
+    } else {
+      sb.hidden = true;
+    }
 
     // Held on the session: a timeout grades the question with no click to
     // report, and still needs the options to mark up the right answer.
@@ -503,6 +606,8 @@
     r.due = Date.now() + INTERVALS[r.box];
     saveStore();
     buzz(right ? 18 : [26, 50, 26]);
+    if (right) { SFX.correct(s.streak); flash('good'); }
+    else { SFX.wrong(); flash('bad'); }
 
     // feedback
     const opts = s.opts;
@@ -515,7 +620,7 @@
       else b.classList.add('muted');
     });
 
-    const delay = right ? 550 : 1250;
+    const delay = right ? 420 : 1250;   // correct answers move on fast
     if (store.settings.auto) setTimeout(next, delay);
     else {
       const cont = document.createElement('button');
@@ -545,6 +650,7 @@
       ms: s.times.reduce((a, b) => a + b, 0),
       misses: s.misses.map((m) => m.code),
     };
+    SFX.finish();
     store.sessions.push(entry);
     if (store.sessions.length > 300) store.sessions = store.sessions.slice(-300);
     saveStore();
@@ -717,6 +823,7 @@
   function renderSettings() {
     $('#setHaptics').checked = store.settings.haptics;
     $('#setAuto').checked = store.settings.auto;
+    $('#setSound').checked = store.settings.sound !== false;
     const answered = store.sessions.reduce((a, s) => a + s.n, 0);
     $('#dataNote').textContent =
       `${store.sessions.length} rounds · ${answered} answers · ${Object.keys(store.flags).length} flags touched. ` +
@@ -735,8 +842,9 @@
       if (b) go(b.dataset.go);
     });
 
-    $('#startBtn').onclick = () => startRound(setupMode);
-    $('#againBtn').onclick = () => startRound(session ? session.mode : 'quick');
+    // Audio can only start from a user gesture; the Start tap is the first one.
+    $('#startBtn').onclick = () => { SFX.unlock(); startRound(setupMode); };
+    $('#againBtn').onclick = () => { SFX.unlock(); startRound(session ? session.mode : 'quick'); };
     $('#quitBtn').onclick = () => {
       stopTimer();
       if (session && session.i > 0) { if (!confirm('Leave this round? Answers so far are already saved.')) return; }
@@ -747,6 +855,10 @@
     $('#optReverse').onchange = (e) => { store.settings.reverse = e.target.checked; saveStore(); };
     $('#setHaptics').onchange = (e) => { store.settings.haptics = e.target.checked; saveStore(); };
     $('#setAuto').onchange = (e) => { store.settings.auto = e.target.checked; saveStore(); };
+    $('#setSound').onchange = (e) => {
+      store.settings.sound = e.target.checked; saveStore();
+      if (e.target.checked) { SFX.unlock(); SFX.tap(); }   // audible confirmation
+    };
 
     let bt = null;
     $('#browseSearch').oninput = (e) => {

@@ -343,6 +343,12 @@ h1, h2, h3, p { margin: 0; }
   font-size: 0.74rem; padding: 4px 11px; border-radius: 20px; font-weight: 600;
   background: #fff2d4; color: #8a5a10; border: 1px solid #f0d38a;
 }
+.badge.bump { animation: badgeBump .34s cubic-bezier(.2, .9, .3, 1); }
+@keyframes badgeBump {
+  0% { transform: scale(.8); opacity: .4; }
+  55% { transform: scale(1.12); }
+  100% { transform: scale(1); opacity: 1; }
+}
 .timer {
   font-size: 0.82rem; color: var(--ink-3); font-variant-numeric: tabular-nums;
   font-weight: 500; transition: color .3s, font-weight .3s;
@@ -382,6 +388,28 @@ h1, h2, h3, p { margin: 0; }
   33%  {                       background-color: #f59021; }  /* ~4s elapsed */
   75%  {                       background-color: #ea6a17; }
   100% { transform: scaleX(0); background-color: #d1362c; }
+}
+
+/* ── verdict flash ──
+   A wash over the whole screen is fine here, unlike the timer: it fires after
+   the answer is locked, so it cannot tint the flag while you are judging it.
+   ::before, because ::after is already carrying the timer vignette. */
+.game::before {
+  content: ""; position: absolute; inset: 0;
+  pointer-events: none; z-index: 3; opacity: 0;
+}
+.game.flash-good::before {
+  background: radial-gradient(circle at 50% 42%, rgba(28, 139, 78, .44), rgba(28, 139, 78, 0) 72%);
+  animation: verdictFlash .46s cubic-bezier(.2, .8, .3, 1);
+}
+.game.flash-bad::before {
+  background: radial-gradient(circle at 50% 42%, rgba(209, 54, 44, .36), rgba(209, 54, 44, 0) 72%);
+  animation: verdictFlash .38s ease-out;
+}
+@keyframes verdictFlash {
+  0% { opacity: 0; }
+  12% { opacity: 1; }
+  100% { opacity: 0; }
 }
 
 /* Urgency is signalled at the edges of the screen, never as a wash over the
@@ -424,8 +452,27 @@ h1, h2, h3, p { margin: 0; }
   transition: background .14s, border-color .14s, transform .1s, box-shadow .14s;
 }
 .ans:active { transform: scale(.97); }
-.ans.correct { background: var(--good-bg); border-color: var(--good); color: #106335; }
-.ans.wrong { background: var(--bad-bg); border-color: var(--bad); color: #9c221a; }
+.ans.correct {
+  background: var(--good-bg); border-color: var(--good); color: #106335;
+  animation: answerPop .34s cubic-bezier(.2, .9, .3, 1);
+  z-index: 4;   /* pops above the verdict wash */
+}
+.ans.wrong {
+  background: var(--bad-bg); border-color: var(--bad); color: #9c221a;
+  animation: answerShake .3s ease-in-out;
+  z-index: 4;
+}
+@keyframes answerPop {
+  0% { transform: scale(1); }
+  38% { transform: scale(1.07); box-shadow: 0 6px 20px rgba(28, 139, 78, .3); }
+  100% { transform: scale(1); }
+}
+@keyframes answerShake {
+  0%, 100% { transform: translateX(0); }
+  20% { transform: translateX(-5px); }
+  45% { transform: translateX(4px); }
+  70% { transform: translateX(-2px); }
+}
 .ans.muted { opacity: .45; box-shadow: none; }
 .ans:disabled { cursor: default; }
 .ans.flagged { padding: 6px; }
