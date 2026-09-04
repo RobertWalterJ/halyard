@@ -85,6 +85,10 @@ DE_STATES = [
 
 # Only the ones that actually exist as a current flag on Commons — several
 # large Canadian cities (Calgary, Halifax, Victoria) simply have none.
+# Titles were found by searching Commons, not guessed — guessing resolved only a
+# third of them. Deliberately excluded: "Flag of Hamilton.svg", which is
+# ambiguous between Hamilton Ontario, Hamilton New Zealand and Hamilton Bermuda.
+# A wrong flag is worse than a missing one.
 CA_CITIES = [
     ("cac-toronto", "Toronto", "Ontario", "Flag of Toronto, Canada.svg"),
     ("cac-ottawa", "Ottawa", "Ontario", "Flag of Ottawa, Ontario.svg"),
@@ -96,6 +100,9 @@ CA_CITIES = [
     ("cac-thunderbay", "Thunder Bay", "Ontario", "Flag of Thunder Bay.svg"),
     ("cac-guelph", "Guelph", "Ontario", "Flag of Guelph.svg"),
     ("cac-charlottetown", "Charlottetown", "Prince Edward Island", "Flag of Charlottetown.svg"),
+    ("cac-vaughan", "Vaughan", "Ontario", "Flag of Vaughan,Ontario.svg"),
+    ("cac-sudbury", "Greater Sudbury", "Ontario", "Flag of Sudbury Ontario.svg"),
+    ("cac-peterborough", "Peterborough", "Ontario", "Flag of Peterborough, Ontario.svg"),
 ]
 
 
@@ -179,7 +186,17 @@ def prepare(svg, code):
     and the artwork corrupts.
     """
     svg = re.sub(r"<\?xml[^>]*\?>", "", svg)
-    svg = re.sub(r"<!DOCTYPE[^>]*>", "", svg, flags=re.I)
+    # Some Commons files carry a DOCTYPE with an internal subset declaring XML
+    # entities. A naive <!DOCTYPE[^>]*> stops at the first ">" inside that
+    # subset and leaves the declarations behind, and the entity references it
+    # defines (xmlns="&ns_svg;") cannot resolve once the markup is injected as
+    # innerHTML — the flag then renders as nothing at all.
+    svg = re.sub(r"<!DOCTYPE[^>\[]*(\[[\s\S]*?\])?\s*>", "", svg, flags=re.I)
+    svg = re.sub(r"^\s*\]>", "", svg)          # stray close of an internal subset
+    svg = svg.replace("&ns_svg;", "http://www.w3.org/2000/svg")
+    svg = svg.replace("&ns_xlink;", "http://www.w3.org/1999/xlink")
+    if "&ns_" in svg:
+        raise ValueError("unresolved XML entity reference")
     svg = re.sub(r"<!--.*?-->", "", svg, flags=re.S)
     svg = re.sub(r"<metadata>.*?</metadata>", "", svg, flags=re.S | re.I)
     svg = re.sub(r"<sodipodi:namedview[^>]*/>", "", svg, flags=re.I)

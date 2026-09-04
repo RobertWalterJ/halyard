@@ -559,7 +559,21 @@
     if (dest === 'home') { stopTimer(); renderHome(); show('home'); }
     else if (dest.startsWith('setup-')) { renderSetup(dest.slice(6)); show('setup'); }
     else if (dest === 'progress') { renderProgress(); show('progress'); }
-    else if (dest === 'browse') { renderBrowse(); show('browse'); }
+    else if (dest === 'browse') {
+      show('browse');
+      renderBrowse();
+      // Browse should show everything the player has switched on, not just the
+      // core set — otherwise enabling Canada leaves its flags invisible here.
+      const pending = (store.settings.packs || [])
+        .filter((id) => DATA.packs[id]?.lazy && !loadedPacks.has(id));
+      if (pending.length) {
+        toast('Loading packs…', 8000);
+        ensurePacks(pending).then((ok) => {
+          $('#toast').hidden = true;
+          if (ok) renderBrowse($('#browseSearch').value);
+        });
+      }
+    }
     else if (dest === 'settings') { renderSettings(); show('settings'); }
   }
 

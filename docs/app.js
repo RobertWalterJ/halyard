@@ -10,7 +10,7 @@
   // Stamped at deploy time by build/make-deploy.mjs and build/bundle-single.mjs.
   // Left as the placeholder when running straight from app/, so the Settings
   // screen can honestly say "dev" rather than invent a version.
-  const BUILD = "2026-09-04 19:23 · dfc1d18";
+  const BUILD = "2026-09-04 19:30 · 93236af";
 
   // The single-file build inlines its data and has no server behind it, which
   // changes two things: no service worker, and no working file downloads.
@@ -559,7 +559,21 @@
     if (dest === 'home') { stopTimer(); renderHome(); show('home'); }
     else if (dest.startsWith('setup-')) { renderSetup(dest.slice(6)); show('setup'); }
     else if (dest === 'progress') { renderProgress(); show('progress'); }
-    else if (dest === 'browse') { renderBrowse(); show('browse'); }
+    else if (dest === 'browse') {
+      show('browse');
+      renderBrowse();
+      // Browse should show everything the player has switched on, not just the
+      // core set — otherwise enabling Canada leaves its flags invisible here.
+      const pending = (store.settings.packs || [])
+        .filter((id) => DATA.packs[id]?.lazy && !loadedPacks.has(id));
+      if (pending.length) {
+        toast('Loading packs…', 8000);
+        ensurePacks(pending).then((ok) => {
+          $('#toast').hidden = true;
+          if (ok) renderBrowse($('#browseSearch').value);
+        });
+      }
+    }
     else if (dest === 'settings') { renderSettings(); show('settings'); }
   }
 

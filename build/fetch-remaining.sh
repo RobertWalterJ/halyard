@@ -56,5 +56,8 @@ grab cac-mississauga   "Flag of Mississauga, Ontario.svg"
 grab cac-thunderbay    "Flag of Thunder Bay.svg"
 grab cac-guelph        "Flag of Guelph.svg"
 grab cac-charlottetown "Flag of Charlottetown.svg"
+grab cac-vaughan       "Flag of Vaughan,Ontario.svg"
+grab cac-sudbury       "Flag of Sudbury Ontario.svg"
+grab cac-peterborough  "Flag of Peterborough, Ontario.svg"
 
 echo "cached total: $(ls "$CACHE" | wc -l)"
