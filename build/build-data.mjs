@@ -19,6 +19,8 @@ const wb = jf('worldbank-population.json');
 
 // ---------- lookups ----------
 const byCca2 = new Map(world.map((c) => [c.cca2.toLowerCase(), c]));
+// world-countries lists borders as cca3; the app keys everything on cca2
+const cca3ToCca2 = new Map(world.map((c) => [c.cca3, c.cca2.toLowerCase()]));
 const popByIso3 = new Map();
 for (const r of wb[1] || []) {
   if (r.value != null && r.countryiso3code) popByIso3.set(r.countryiso3code, r.value);
@@ -213,6 +215,8 @@ for (const file of svgFiles) {
   let capital = null;
   let pop = null;
   let parent = null;
+  let facts = null;
+  let borders = [];
 
   if (ORGS.has(code)) {
     group = 'org';
@@ -233,6 +237,17 @@ for (const file of svgFiles) {
     subregion = wcRec.subregion;
     capital = wcRec.capital?.[0] ?? fi?.capital ?? null;
     pop = popByIso3.get(wcRec.cca3) ?? null;
+    // Geography that was already downloaded and unused until now.
+    facts = {
+      currency: Object.values(wcRec.currencies || {})[0]?.name ?? null,
+      demonym: wcRec.demonyms?.eng?.m ?? null,
+      languages: Object.values(wcRec.languages || {}),
+      landlocked: !!wcRec.landlocked,
+      area: wcRec.area ?? null,
+      latlng: wcRec.latlng ?? null,
+      cca3: wcRec.cca3 ?? null,
+    };
+    borders = (wcRec.borders || []).map((b) => cca3ToCca2.get(b)).filter(Boolean);
   } else {
     group = 'territory';
     name = fi?.name ?? code.toUpperCase();
@@ -258,6 +273,8 @@ for (const file of svgFiles) {
     colours: colourSig(raw),
     near: [...(confusableOf.get(code) || [])],
     clash: [...(clashOf.get(code) || [])],
+    borders,
+    ...(facts || {}),
   };
   if (parent) rec.parent = parent;
   entries.push(rec);

@@ -10,7 +10,7 @@
   // Stamped at deploy time by build/make-deploy.mjs and build/bundle-single.mjs.
   // Left as the placeholder when running straight from app/, so the Settings
   // screen can honestly say "dev" rather than invent a version.
-  const BUILD = "2026-09-04 10:02 · 48d0a2d";
+  const BUILD = "2026-09-04 19:12 · 6297a68";
 
   // The single-file build inlines its data and has no server behind it, which
   // changes two things: no service worker, and no working file downloads.
@@ -34,6 +34,7 @@
     haptics: true,
     auto: true,
     sound: true,
+    kinds: ['flag-name'],   // what Quick Play / Training ask about
   };
 
   // Leitner intervals per box, in ms. Box 0 is always due.
@@ -47,24 +48,50 @@
   // Every kind still resolves to "four flag records, one is right", so grading
   // and the whole Leitner layer stay untouched. Only the prompt and what is
   // printed on the buttons change.
-  const KINDS = {
-    'flag-name':    { prompt: 'flag',    option: 'name',    ask: null },
-    'name-flag':    { prompt: 'name',    option: 'flag',    ask: 'Which flag belongs to' },
-    'flag-capital': { prompt: 'flag',    option: 'capital', ask: 'What is its capital?' },
-    'capital-flag': { prompt: 'capital', option: 'flag',    ask: 'Which flag flies over' },
-    'zoom-name':    { prompt: 'zoom',    option: 'name',    ask: null },
+  // Everything a question can ask *about* a flag. Options are still flag records;
+  // the fact decides what gets printed on the button and what counts as distinct.
+  const FACTS = {
+    name: (f) => f.name,
+    capital: (f) => f.capital,
+    region: (f) => f.region,
+    currency: (f) => f.currency,
+    demonym: (f) => f.demonym,
   };
+
+  const KINDS = {
+    'flag-name':     { prompt: 'flag', option: 'fact', fact: 'name', ask: null },
+    'name-flag':     { prompt: 'fact', promptFact: 'name', option: 'flag', ask: 'Which flag belongs to' },
+    'flag-capital':  { prompt: 'flag', option: 'fact', fact: 'capital', ask: 'What is its capital?' },
+    'capital-flag':  { prompt: 'fact', promptFact: 'capital', option: 'flag', ask: 'Which flag flies over' },
+    'zoom-name':     { prompt: 'zoom', option: 'fact', fact: 'name', ask: null },
+    'flag-region':   { prompt: 'flag', option: 'fact', fact: 'region', ask: 'Which part of the world?' },
+    'flag-currency': { prompt: 'flag', option: 'fact', fact: 'currency', ask: 'Which currency?' },
+    'flag-demonym':  { prompt: 'flag', option: 'fact', fact: 'demonym', ask: 'Its people are called?' },
+    // The odd one out: the correct answer is a *different* country from the one
+    // shown, so grading cannot assume the prompt flag is the answer.
+    'flag-border':   { prompt: 'flag', option: 'fact', fact: 'name', border: true,
+                       ask: 'Which country does it border?' },
+  };
+
+  // What Quick Play and Training can mix within a single round.
+  const MIX = [
+    { kind: 'flag-name', label: 'Name it' },
+    { kind: 'name-flag', label: 'Pick the flag' },
+    { kind: 'flag-capital', label: 'Capital' },
+    { kind: 'flag-region', label: 'Region' },
+    { kind: 'flag-border', label: 'Borders' },
+    { kind: 'flag-currency', label: 'Currency' },
+    { kind: 'flag-demonym', label: 'People' },
+  ];
 
   const MODES = {
     quick: {
-      id: 'quick', label: 'Quick Play', kind: 'flag-name', flip: 'name-flag',
-      flipLabel: 'Name → flag', flipHint: 'Show the country name, pick the flag',
+      id: 'quick', label: 'Quick Play', kind: 'flag-name', mix: true,
       timed: true, adaptive: false,
       lede: 'A fixed round against the clock. Scored, and it still counts toward your progress.',
     },
     training: {
-      id: 'training', label: 'Training', kind: 'flag-name', flip: 'name-flag',
-      flipLabel: 'Name → flag', flipHint: 'Show the country name, pick the flag',
+      id: 'training', label: 'Training', kind: 'flag-name', mix: true,
       timed: false, adaptive: true,
       lede: 'Untimed. Halyard picks what you are due to review and what you keep getting wrong.',
     },
@@ -392,6 +419,67 @@
     return chosen;
   }
 
+  // ── building a question ─────────────────────────────────────────────────
+  // Returns the four options and which code is actually correct. For most kinds
+  // that is the flag being shown; for Borders it is one of its neighbours.
+  function buildQuestion(f, p, mode, kind) {
+    const spec = KINDS[kind];
+
+    if (spec.border) {
+      // Keep the answer inside the current scope, so filtering to Europe does
+      // not produce a European flag whose only correct answer is in Asia.
+      const neigh = (f.borders || []).map((c) => BY.get(c))
+        .filter((x) => x && p.some((q) => q.code === x.code));
+      const correct = neigh[(Math.random() * neigh.length) | 0];
+      const excluded = new Set([f.code, ...(f.borders || [])]);
+      const others = shuffle(p.filter((x) => !excluded.has(x.code)));
+      return { options: shuffle([correct, ...others.slice(0, 3)]), correctCode: correct.code };
+    }
+
+    const valueOf = FACTS[spec.fact];
+    const want = valueOf(f);
+    const seen = new Set([String(want)]);
+    // Names get the similarity-ranked distractors; other facts just need three
+    // options whose value genuinely differs, or the question has two right answers.
+    const candidates = spec.fact === 'name'
+      ? distractorsFor(f, p, mode)
+      : shuffle(p.slice());
+    const picked = [];
+    for (const c of candidates) {
+      if (picked.length >= 3) break;
+      if (c.code === f.code) continue;
+      const v = valueOf(c);
+      if (v == null || seen.has(String(v))) continue;
+      if (spec.fact === 'name' && (clashes(f, c) || picked.some((x) => clashes(x, c)))) continue;
+      seen.add(String(v));
+      picked.push(c);
+    }
+    return { options: shuffle([f, ...picked]), correctCode: f.code };
+  }
+
+  // Can this kind actually be asked about this flag, within this pool?
+  function kindUsable(kind, f, p, distinct) {
+    const spec = KINDS[kind];
+    if (!spec) return false;
+    if (spec.border) {
+      const neigh = (f.borders || []).filter((c) => p.some((q) => q.code === c));
+      return neigh.length > 0 && p.length >= 5;
+    }
+    const factName = spec.fact || spec.promptFact;
+    if (FACTS[factName](f) == null) return false;
+    // Need the answer plus three genuinely different values available.
+    return (distinct[factName] || 0) >= 4;
+  }
+
+  // Distinct value counts for the pool, computed once per round.
+  function distinctCounts(p) {
+    const out = {};
+    for (const key of Object.keys(FACTS)) {
+      out[key] = new Set(p.map((f) => FACTS[key](f)).filter((v) => v != null)).size;
+    }
+    return out;
+  }
+
   // ── views ───────────────────────────────────────────────────────────────
   const VIEWS = ['home', 'setup', 'game', 'results', 'progress', 'browse', 'settings'];
   function show(name) {
@@ -535,6 +623,29 @@
       flipRow.querySelector('i').textContent = mode.flipHint;
     }
 
+    // question mix — only for the modes that support one
+    $('#mixGroup').hidden = !mode.mix;
+    if (mode.mix) {
+      const ml = $('#mixList'); ml.innerHTML = '';
+      const on = st.kinds && st.kinds.length ? st.kinds : ['flag-name'];
+      for (const m of MIX) {
+        const b = chip(m.label, on.includes(m.kind));
+        b.onclick = () => {
+          const cur = (st.kinds && st.kinds.length ? st.kinds : ['flag-name']).slice();
+          const i = cur.indexOf(m.kind);
+          if (i >= 0) {
+            if (cur.length === 1) return toast('Keep at least one question type');
+            cur.splice(i, 1);
+          } else {
+            cur.push(m.kind);
+          }
+          st.kinds = cur;
+          saveStore(); renderSetup(modeId);
+        };
+        ml.appendChild(b);
+      }
+    }
+
     // packs
     const pl = $('#packList'); pl.innerHTML = '';
     for (const [id, meta] of Object.entries(DATA.packs)) {
@@ -644,7 +755,7 @@
     if (qs.length < 1) return toast('Not enough flags in scope');
 
     session = {
-      mode: mode.id, pool: p, qs, i: 0,
+      mode: mode.id, pool: p, qs, i: 0, distinct: distinctCounts(p),
       correct: 0, streak: 0, bestStreak: 0, score: 0,
       misses: [], times: [], newlyMastered: [],
       t0: Date.now(), locked: false,
@@ -655,7 +766,8 @@
 
   // What the buttons say for a given option, per question kind.
   function optionLabel(o, kind) {
-    return KINDS[kind].option === 'capital' ? (o.capital || o.name) : o.name;
+    const spec = KINDS[kind];
+    return String(FACTS[spec.fact || 'name'](o) ?? o.name);
   }
 
   function renderQuestion() {
@@ -663,8 +775,16 @@
     const f = s.qs[s.i];
     const st = store.settings;
     const mode = modeOf(s.mode);
-    // The flip toggle only applies to modes that define one.
-    const kind = (mode.flip && st.reverse) ? mode.flip : mode.kind;
+    // Mixed modes draw a kind per question from whatever is switched on, falling
+    // back to naming the flag when this particular flag cannot support the rest.
+    let kind;
+    if (mode.mix) {
+      const wanted = (st.kinds && st.kinds.length ? st.kinds : ['flag-name']);
+      const usable = wanted.filter((k) => kindUsable(k, f, s.pool, s.distinct));
+      kind = usable.length ? usable[(Math.random() * usable.length) | 0] : 'flag-name';
+    } else {
+      kind = (mode.flip && st.reverse) ? mode.flip : mode.kind;
+    }
     const spec = KINDS[kind];
     s.kind = kind;
     s.locked = false;
@@ -684,8 +804,10 @@
 
     // Held on the session: a timeout grades the question with no click to
     // report, and still needs the options to mark up the right answer.
-    const opts = shuffle([f, ...distractorsFor(f, s.pool, mode)]);
+    const built = buildQuestion(f, s.pool, mode, kind);
+    const opts = built.options;
     s.opts = opts;
+    s.correctCode = built.correctCode;
 
     const card = $('#flagCard');
     const nameEl = $('#promptName');
@@ -695,7 +817,7 @@
 
     // ── prompt ──
     card.hidden = spec.prompt !== 'flag' && spec.prompt !== 'zoom';
-    nameEl.hidden = spec.prompt !== 'name' && spec.prompt !== 'capital';
+    nameEl.hidden = spec.prompt !== 'fact';
 
     if (spec.prompt === 'flag') {
       card.innerHTML = flagMarkup(f.code);
@@ -720,7 +842,7 @@
         nameEl.appendChild(small);
       }
       nameEl.appendChild(document.createTextNode(
-        spec.prompt === 'capital' ? (f.capital || f.name) : f.name));
+        String(FACTS[spec.promptFact || 'name'](f) ?? f.name)));
     }
 
     // A line stating the question where the prompt alone does not imply it.
@@ -789,6 +911,8 @@
     $('#view-game')?.classList.remove('warn', 'urgent');
   }
 
+  const kindOfSession = () => (session && session.kind) || 'flag-name';
+
   function answer(choice) {
     const s = session;
     if (!s || s.locked) return;
@@ -800,7 +924,9 @@
 
     const f = s.qs[s.i];
     const ms = Date.now() - s.qStart;
-    const right = !!choice && choice.code === f.code;
+    // For Borders the answer is a neighbour, not the flag on screen — so the
+    // question records which code is correct rather than assuming it.
+    const right = !!choice && choice.code === (s.correctCode || f.code);
     s.times.push(ms);
 
     // grade + schedule
@@ -838,7 +964,7 @@
     buttons.forEach((b, idx) => {
       b.disabled = true;
       const o = opts[idx];
-      if (o.code === f.code) b.classList.add('correct');
+      if (o.code === (s.correctCode || f.code)) b.classList.add('correct');
       else if (choice && o.code === choice.code) b.classList.add('wrong');
       else b.classList.add('muted');
     });
@@ -849,7 +975,8 @@
       const cont = document.createElement('button');
       cont.className = 'ans';
       cont.style.gridColumn = '1 / -1';
-      cont.textContent = right ? 'Next' : `${f.name} — Next`;
+      const answerLabel = optionLabel(BY.get(s.correctCode || f.code) || f, kindOfSession());
+      cont.textContent = right ? 'Next' : `${answerLabel} — Next`;
       cont.disabled = false;
       cont.onclick = next;
       $('#answers').appendChild(cont);
