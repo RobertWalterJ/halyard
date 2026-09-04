@@ -1,0 +1,24 @@
+# Same shape as GoCommute's: no build step, just publish the static app folder.
+# Used only if Halyard is wired up as a Git-connected site. For a drag-and-drop
+# deploy this file is not needed — drop dist/web (or dist/halyard-web.zip),
+# which is the same site with the unused individual SVGs stripped out.
+[build]
+  publish = "app"
+  command = ""
+
+# The service worker must never be served stale, or a deploy can leave a phone
+# pinned to the previous version. Everything else is content-hashed by name.
+[[headers]]
+  for = "/sw.js"
+  [headers.values]
+    Cache-Control = "no-cache, no-store, must-revalidate"
+
+[[headers]]
+  for = "/manifest.webmanifest"
+  [headers.values]
+    Cache-Control = "no-cache"
+
+[[headers]]
+  for = "/fonts/*"
+  [headers.values]
+    Cache-Control = "public, max-age=31536000, immutable"

@@ -1,0 +1,5 @@
+# Build artefacts. docs/ is intentionally NOT ignored — GitHub Pages serves it.
+dist/
+node_modules/
+.DS_Store
+Thumbs.db

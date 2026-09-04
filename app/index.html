@@ -1,0 +1,288 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover, maximum-scale=1">
+<meta name="theme-color" content="#ffffff">
+<meta name="apple-mobile-web-app-capable" content="yes">
+<meta name="apple-mobile-web-app-status-bar-style" content="default">
+<meta name="apple-mobile-web-app-title" content="Halyard">
+<title>Halyard</title>
+<link rel="manifest" href="manifest.webmanifest">
+<link rel="icon" href="icons/icon-192.png">
+<link rel="apple-touch-icon" href="icons/icon-192.png">
+<link rel="stylesheet" href="styles.css">
+</head>
+<body>
+
+<div id="boot" class="boot"><div class="boot-mark"></div><p>Loading flags…</p></div>
+
+<!-- shared gradient for the mastery ring -->
+<svg width="0" height="0" style="position:absolute" aria-hidden="true"><defs>
+  <linearGradient id="ringGrad" x1="0" y1="0" x2="1" y2="1">
+    <stop offset="0%" stop-color="#ffc42e"/><stop offset="100%" stop-color="#ea6a17"/>
+  </linearGradient>
+</defs></svg>
+
+<!-- ══════════ HOME ══════════ -->
+<section id="view-home" class="view home" hidden>
+  <div class="home-scroll">
+
+    <div class="hero">
+      <svg class="bunting" id="bunting" viewBox="0 0 360 128" role="img"
+           aria-label="A line of world flags strung from a halyard"></svg>
+      <h1 class="wordmark">Hal<em>yard</em></h1>
+      <p class="tagline">Every flag in the world, one at a time — until you know them for good.</p>
+    </div>
+
+    <div class="progress-strip">
+      <div class="ring-wrap">
+        <svg class="ring" viewBox="0 0 100 100" aria-hidden="true">
+          <circle class="ring-bg" cx="50" cy="50" r="37.5"/>
+          <circle class="ring-fg" id="masteryRing" cx="50" cy="50" r="37.5"/>
+        </svg>
+        <div class="ring-mid">
+          <span class="ring-num" id="masteryPct">0<i>%</i></span>
+          <span class="ring-lbl">mastered</span>
+        </div>
+      </div>
+      <div class="pstats">
+        <div class="pstat"><b id="statLearned">0</b><span id="statScopeLbl">of 0 flags</span></div>
+        <div class="pstat"><b id="statStreak">0</b><span>day streak</span></div>
+        <div class="pstat"><b id="statAnswered">0</b><span>answered</span></div>
+      </div>
+    </div>
+
+    <div id="dueBanner" class="due-banner" hidden></div>
+
+    <div class="modes">
+      <button class="mode primary" data-go="setup-quick">
+        <span class="mode-ico">
+          <svg viewBox="0 0 24 24" aria-hidden="true"><circle cx="12" cy="13" r="8"/><path d="M12 9v4l2.5 2.5M9 2h6"/></svg>
+        </span>
+        <span class="mode-txt"><b>Quick Play</b><i id="quickSub">20 questions against the clock</i></span>
+        <span class="mode-go" aria-hidden="true">›</span>
+      </button>
+      <button class="mode" data-go="setup-training">
+        <span class="mode-ico">
+          <svg viewBox="0 0 24 24" aria-hidden="true"><circle cx="12" cy="12" r="8.5"/><circle cx="12" cy="12" r="4.5"/><circle cx="12" cy="12" r="1"/></svg>
+        </span>
+        <span class="mode-txt"><b>Training</b><i id="trainSub">Adaptive — targets your weak spots</i></span>
+        <span class="mode-go" aria-hidden="true">›</span>
+      </button>
+    </div>
+
+    <nav class="tiles">
+      <button data-go="progress">
+        <svg viewBox="0 0 24 24" aria-hidden="true"><path d="M3 20h18M6 20v-6M11 20V8M16 20v-9M21 20V5"/></svg>
+        Progress
+      </button>
+      <button data-go="browse">
+        <svg viewBox="0 0 24 24" aria-hidden="true"><rect x="3" y="4" width="7.5" height="6.5" rx="1.4"/><rect x="13.5" y="4" width="7.5" height="6.5" rx="1.4"/><rect x="3" y="13.5" width="7.5" height="6.5" rx="1.4"/><rect x="13.5" y="13.5" width="7.5" height="6.5" rx="1.4"/></svg>
+        Browse
+      </button>
+      <button data-go="settings">
+        <svg viewBox="0 0 24 24" aria-hidden="true"><circle cx="12" cy="12" r="3.2"/><path d="M19.4 13a7.7 7.7 0 0 0 0-2l2-1.6-2-3.4-2.4 1a7.6 7.6 0 0 0-1.7-1L15 3.5h-4l-.3 2.5a7.6 7.6 0 0 0-1.7 1l-2.4-1-2 3.4L6.6 11a7.7 7.7 0 0 0 0 2l-2 1.6 2 3.4 2.4-1c.5.4 1.1.7 1.7 1l.3 2.5h4l.3-2.5c.6-.3 1.2-.6 1.7-1l2.4 1 2-3.4-2-1.6Z"/></svg>
+        Settings
+      </button>
+    </nav>
+
+  </div>
+</section>
+
+<!-- ══════════ SETUP ══════════ -->
+<section id="view-setup" class="view" hidden>
+  <header class="bar">
+    <button class="back" data-go="home" aria-label="Back">
+      <svg viewBox="0 0 24 24" aria-hidden="true"><path d="M15 5l-7 7 7 7"/></svg>
+    </button>
+    <h2 id="setupTitle">Quick Play</h2>
+    <span class="bar-sp"></span>
+  </header>
+
+  <div class="scroll">
+    <p class="lede" id="setupLede"></p>
+
+    <fieldset class="group">
+      <legend>Packs</legend>
+      <div id="packList" class="chips"></div>
+    </fieldset>
+
+    <fieldset class="group">
+      <legend>Regions</legend>
+      <div id="regionList" class="chips"></div>
+    </fieldset>
+
+    <fieldset class="group" id="tierGroup">
+      <legend>Difficulty</legend>
+      <div id="tierList" class="chips"></div>
+      <p class="hint">Filters which flags appear, by how widely recognised they are.</p>
+    </fieldset>
+
+    <fieldset class="group" id="lengthGroup">
+      <legend>Round length</legend>
+      <div id="lengthList" class="chips"></div>
+    </fieldset>
+
+    <fieldset class="group">
+      <legend>Options</legend>
+      <label class="row-toggle">
+        <span><b>Cruel distractors</b><i>Wrong answers chosen to look like the real flag</i></span>
+        <input type="checkbox" id="optHard">
+      </label>
+      <label class="row-toggle">
+        <span><b>Name → flag</b><i>Show the country name, pick the flag</i></span>
+        <input type="checkbox" id="optReverse">
+      </label>
+    </fieldset>
+  </div>
+
+  <footer class="foot">
+    <p class="pool" id="poolCount"></p>
+    <button class="btn-go" id="startBtn">Start</button>
+  </footer>
+</section>
+
+<!-- ══════════ GAME ══════════ -->
+<section id="view-game" class="view game" hidden>
+  <header class="game-head">
+    <button class="back" id="quitBtn" aria-label="Quit round">
+      <svg viewBox="0 0 24 24" aria-hidden="true"><path d="M15 5l-7 7 7 7"/></svg>
+    </button>
+    <div class="qprog"><div class="qprog-fill" id="qProgFill"></div></div>
+    <span class="qcount" id="qCount">1/20</span>
+  </header>
+
+  <div class="game-meta">
+    <span class="badge" id="streakBadge" hidden></span>
+    <span class="timer" id="timer" hidden></span>
+  </div>
+
+  <div class="stage">
+    <div class="flag-card" id="flagCard"></div>
+    <p class="prompt-name" id="promptName" hidden></p>
+    <div class="time-bar" id="timeBar" hidden
+         role="timer" aria-label="Time remaining this question">
+      <div class="time-bar-fill" id="timeBarFill"></div>
+    </div>
+  </div>
+
+  <div class="answers" id="answers"></div>
+</section>
+
+<!-- ══════════ RESULTS ══════════ -->
+<section id="view-results" class="view" hidden>
+  <div class="scroll">
+    <div class="res-head">
+      <p class="res-kicker" id="resKicker">Round complete</p>
+      <p class="res-score" id="resScore">0</p>
+      <p class="res-line" id="resLine"></p>
+    </div>
+
+    <div class="res-grid">
+      <div class="res-stat"><b id="resAcc">0%</b><span>accuracy</span></div>
+      <div class="res-stat"><b id="resStreak">0</b><span>best streak</span></div>
+      <div class="res-stat"><b id="resSpeed">0.0s</b><span>avg answer</span></div>
+    </div>
+
+    <div id="resNewBox" class="res-new" hidden></div>
+
+    <h3 class="res-sub" id="missTitle" hidden>Worth another look</h3>
+    <div id="missList" class="miss-list"></div>
+  </div>
+  <footer class="foot two">
+    <button class="btn-alt" data-go="home">Done</button>
+    <button class="btn-go" id="againBtn">Again</button>
+  </footer>
+</section>
+
+<!-- ══════════ PROGRESS ══════════ -->
+<section id="view-progress" class="view" hidden>
+  <header class="bar">
+    <button class="back" data-go="home" aria-label="Back">
+      <svg viewBox="0 0 24 24" aria-hidden="true"><path d="M15 5l-7 7 7 7"/></svg>
+    </button>
+    <h2>Progress</h2>
+    <span class="bar-sp"></span>
+  </header>
+  <div class="scroll">
+    <div class="res-grid four">
+      <div class="res-stat"><b id="pgAnswered">0</b><span>answered</span></div>
+      <div class="res-stat"><b id="pgAcc">0%</b><span>lifetime</span></div>
+      <div class="res-stat"><b id="pgSessions">0</b><span>rounds</span></div>
+      <div class="res-stat"><b id="pgDays">0</b><span>days</span></div>
+    </div>
+
+    <h3 class="res-sub">Accuracy over time</h3>
+    <div class="chart-wrap"><svg id="trendChart" viewBox="0 0 320 120" preserveAspectRatio="none"></svg></div>
+    <p class="hint" id="trendHint"></p>
+
+    <h3 class="res-sub">By region</h3>
+    <div id="regionBars" class="bars"></div>
+
+    <h3 class="res-sub">Weakest flags</h3>
+    <div id="weakList" class="miss-list"></div>
+
+    <h3 class="res-sub">Recent rounds</h3>
+    <div id="sessionList" class="sess-list"></div>
+  </div>
+</section>
+
+<!-- ══════════ BROWSE ══════════ -->
+<section id="view-browse" class="view" hidden>
+  <header class="bar">
+    <button class="back" data-go="home" aria-label="Back">
+      <svg viewBox="0 0 24 24" aria-hidden="true"><path d="M15 5l-7 7 7 7"/></svg>
+    </button>
+    <h2>Browse</h2>
+    <span class="bar-sp"></span>
+  </header>
+  <div class="search-wrap">
+    <input id="browseSearch" type="search" placeholder="Search flags, capitals…" autocomplete="off" spellcheck="false">
+  </div>
+  <div class="scroll">
+    <div id="browseGrid" class="browse-grid"></div>
+  </div>
+</section>
+
+<!-- ══════════ SETTINGS ══════════ -->
+<section id="view-settings" class="view" hidden>
+  <header class="bar">
+    <button class="back" data-go="home" aria-label="Back">
+      <svg viewBox="0 0 24 24" aria-hidden="true"><path d="M15 5l-7 7 7 7"/></svg>
+    </button>
+    <h2>Settings</h2>
+    <span class="bar-sp"></span>
+  </header>
+  <div class="scroll">
+    <fieldset class="group">
+      <legend>Feel</legend>
+      <label class="row-toggle">
+        <span><b>Haptics</b><i>Buzz on answer</i></span>
+        <input type="checkbox" id="setHaptics">
+      </label>
+      <label class="row-toggle">
+        <span><b>Auto-advance</b><i>Move on automatically after each answer</i></span>
+        <input type="checkbox" id="setAuto">
+      </label>
+    </fieldset>
+
+    <fieldset class="group">
+      <legend>Data</legend>
+      <p class="hint" id="dataNote"></p>
+      <button class="btn-alt wide" id="exportBtn">Export progress</button>
+      <button class="btn-alt wide danger" id="resetBtn">Reset all progress</button>
+    </fieldset>
+
+    <fieldset class="group">
+      <legend>About</legend>
+      <p class="hint" id="aboutNote"></p>
+    </fieldset>
+  </div>
+</section>
+
+<div id="toast" class="toast" hidden></div>
+
+<script src="app.js"></script>
+</body>
+</html>
