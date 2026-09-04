@@ -286,6 +286,17 @@ h1, h2, h3, p { margin: 0; }
   background: var(--paper-3); border-color: var(--orange); color: var(--ink); font-weight: 600;
 }
 .chip .n { font-size: 0.72rem; color: var(--ink-3); font-variant-numeric: tabular-nums; }
+/* download size on packs that are not bundled, so the cost is stated up front */
+.chip .n.dl {
+  padding: 1px 6px; border-radius: 6px; background: var(--paper-3);
+  border: 1px solid var(--line); color: var(--ink-2); font-size: 0.66rem;
+}
+.chip.loading { opacity: .6; pointer-events: none; }
+.chip.loading::after {
+  content: ""; width: 13px; height: 13px; border-radius: 50%;
+  border: 2px solid var(--line-2); border-top-color: var(--orange);
+  animation: spin .7s linear infinite;
+}
 .chip[aria-pressed="true"] .n { color: var(--orange-deep); }
 
 .row-toggle {

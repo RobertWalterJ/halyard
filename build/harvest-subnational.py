@@ -136,16 +136,35 @@ def resolve(titles):
 
 
 def fetch(url, cache_name):
+    """Download once, then serve from sources/commons/ on every later run.
+
+    Commons rate-limits, so this backs off on 429 rather than hammering, and
+    caches to disk so a re-run costs no requests at all.
+    """
     os.makedirs(CACHE, exist_ok=True)
     path = os.path.join(CACHE, cache_name)
     if os.path.exists(path):
         return open(path, encoding="utf-8").read()
-    req = urllib.request.Request(url, headers={"User-Agent": UA})
-    with urllib.request.urlopen(req, timeout=120) as r:
-        body = r.read().decode("utf-8", "replace")
-    open(path, "w", encoding="utf-8").write(body)
-    time.sleep(0.2)   # be polite to Commons
-    return body
+    # HALYARD_OFFLINE=1 builds strictly from what is already cached. Commons
+    # throttles hard, so this makes the build reproducible without re-hitting it.
+    if os.environ.get("HALYARD_OFFLINE") == "1":
+        raise FileNotFoundError(f"not cached: {cache_name}")
+    delay = 1.0
+    for attempt in range(6):
+        try:
+            req = urllib.request.Request(url, headers={"User-Agent": UA})
+            with urllib.request.urlopen(req, timeout=120) as r:
+                body = r.read().decode("utf-8", "replace")
+            open(path, "w", encoding="utf-8").write(body)
+            time.sleep(1.0)      # ~1 req/sec sustained
+            return body
+        except urllib.error.HTTPError as e:
+            if e.code not in (429, 503):
+                raise
+            print(f"      rate-limited, waiting {delay:.0f}s")
+            time.sleep(delay)
+            delay = min(delay * 2, 30)
+    raise RuntimeError(f"gave up fetching {url}")
 
 
 ID_ATTR = re.compile(r'\bid\s*=\s*"([^"]+)"')
@@ -196,9 +215,14 @@ def prepare(svg, code):
     return svg
 
 
-def build(pack_id, label, note, region, entries, parent_of, title_of):
+def build(pack_id, label, note, region, entries, parent_of, title_of, capital_of=lambda e: e[2], extra=None):
     titles = [title_of(e) for e in entries]
-    meta = resolve(titles)
+    if os.environ.get("HALYARD_OFFLINE") == "1":
+        # cached files are named by code, so no lookup is needed
+        meta = {title_of(e): {"url": "", "title": title_of(e), "licence": "see Commons",
+                              "artist": "", "size": 0} for e in entries}
+    else:
+        meta = resolve(titles)
     flags, svgs, credits = [], {}, []
     missing = []
     for e in entries:
@@ -208,20 +232,50 @@ def build(pack_id, label, note, region, entries, parent_of, title_of):
         if not info:
             missing.append(title)
             continue
-        raw = fetch(info["url"], code + ".svg")
         try:
+            raw = fetch(info["url"], code + ".svg")
             svg = prepare(raw, code)
-        except ValueError as err:
+        except (ValueError, FileNotFoundError) as err:
             missing.append(f"{title} ({err})")
             continue
         flags.append({
             "code": code, "name": e[1], "group": "subdivision", "pack": pack_id,
-            "region": region, "subregion": parent_of(e), "capital": e[2],
+            "region": region, "subregion": parent_of(e), "capital": capital_of(e),
             "pop": None, "tier": 2, "colours": [], "near": [], "parent": parent_of(e),
         })
         svgs[code] = svg
         credits.append({"code": code, "file": info["title"],
                         "licence": info["licence"], "artist": info["artist"]})
+    # A second group folded into the same pack (Canadian cities alongside the
+    # provinces): 3 city flags cannot fill a 4-option question on their own, and
+    # they have no capital so Capitals mode skips them automatically.
+    for spec in (extra or []):
+        emeta = ({spec["title_of"](e): {"url": "", "title": spec["title_of"](e),
+                                        "licence": "see Commons", "artist": "", "size": 0}
+                  for e in spec["entries"]}
+                 if os.environ.get("HALYARD_OFFLINE") == "1"
+                 else resolve([spec["title_of"](e) for e in spec["entries"]]))
+        for e in spec["entries"]:
+            info = emeta.get(spec["title_of"](e))
+            if not info:
+                missing.append(spec["title_of"](e))
+                continue
+            try:
+                raw = fetch(info["url"], e[0] + ".svg")
+                svg = prepare(raw, e[0])
+            except (ValueError, FileNotFoundError) as err:
+                missing.append(f"{spec['title_of'](e)} ({err})")
+                continue
+            flags.append({
+                "code": e[0], "name": e[1], "group": "subdivision", "pack": pack_id,
+                "region": region, "subregion": spec["parent_of"](e),
+                "capital": spec["capital_of"](e), "pop": None, "tier": 2,
+                "colours": [], "near": [], "parent": spec["parent_of"](e),
+            })
+            svgs[e[0]] = svg
+            credits.append({"code": e[0], "file": info["title"],
+                            "licence": info["licence"], "artist": info["artist"]})
+
     out = {"pack": pack_id, "label": label, "note": note,
            "source": "Wikimedia Commons", "credits": credits,
            "flags": flags, "svgs": svgs}
@@ -240,16 +294,19 @@ def build(pack_id, label, note, region, entries, parent_of, title_of):
 if __name__ == "__main__":
     print("harvesting sub-national packs from Wikimedia Commons")
     summary = []
-    summary.append(build("ca-prov", "Canada", "Provinces & territories", "Americas",
-                         CA_PROV, lambda e: "Canada", lambda e: e[3]))
+    summary.append(build("ca-prov", "Canada", "Provinces, territories & cities", "Americas",
+                         CA_PROV, lambda e: "Canada", lambda e: e[3],
+                         extra=[{"entries": CA_CITIES,
+                                 "parent_of": lambda e: e[2],
+                                 "capital_of": lambda e: None,
+                                 "title_of": lambda e: e[3]}]))
     summary.append(build("us-states", "United States", "States", "Americas",
                          [(c, n, cap) for c, n, cap in US_STATES],
                          lambda e: "United States",
                          lambda e: f"Flag of {e[1]}.svg" if e[1] != "Georgia" else "Flag of Georgia (U.S. state).svg"))
     summary.append(build("de-states", "Germany", "States", "Europe",
                          DE_STATES, lambda e: "Germany", lambda e: e[3]))
-    summary.append(build("ca-cities", "Canadian cities", "Municipal flags", "Americas",
-                         CA_CITIES, lambda e: e[2], lambda e: e[3]))
+
     print("\nsummary:")
     for s in summary:
         print(f"  {s['id']:12} {s['count']:3} flags  {s['bytes']/1024/1024:5.2f} MB")

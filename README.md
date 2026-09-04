@@ -73,6 +73,38 @@ Round one ships countries and the seed sets that came free with the flag data.
 | Disputed | 4 | Kosovo, Taiwan, Palestine, Western Sahara |
 | Organisations | 7 | UN, EU, ASEAN, Arab League, CEFTA, EAC, Pacific Community |
 | Sub-national | 11 | UK home nations, Spanish autonomies, St Helena constituents |
+| Canada | 16 | 13 provinces & territories + Toronto, Ottawa, Montreal · *lazy* |
+| Germany | 14 | States · *lazy* |
+| United States | 50 | States · *lazy* |
+
+### Lazy packs
+
+The sub-national sets are **not** in the core bundle. The US states alone are
+7.7MB — four times the whole rest of the app — because most are a detailed seal
+on a plain field. Each set is a separate file fetched the first time you switch
+the pack on; the service worker then caches it, so it is offline from the second
+use onward. The chip shows the download size before you commit to it, and
+`sw.js` deliberately does not precache them so a fresh install does not pay for
+sets it may never use.
+
+Harvested from Wikimedia Commons by `build/harvest-subnational.py`. Two things
+that pass matter there: every SVG is given a `viewBox` if it lacks one (or it
+will not scale into the card), and **every internal id is namespaced by flag
+code**. Browse renders hundreds of flags into one document, and Commons files
+reuse generic ids like `a` — without namespacing, `url(#a)` in one flag resolves
+against another flag's gradient and the artwork corrupts. Verified: 1,786 ids
+across 336 rendered flags, zero collisions.
+
+Because these keep their real proportions (unlike the 4:3-normalised country
+set), they letterbox in the card — Ontario shows as the 1:2 flag it actually is.
+
+Capitals mode works on these for free: provinces and states carry their capital,
+so it asks "Ontario → Toronto" and "Bavaria → Munich". The three city flags have
+no capital, so Capitals silently skips them.
+
+**Missing, pending Commons:** North Rhine-Westphalia and Saxony-Anhalt, and most
+large Canadian cities (Calgary, Halifax, Victoria, Edmonton have no current SVG
+flag on Commons at all).
 
 Partially recognised states are deliberately their own opt-in group rather than
 being silently ruled in or out of "countries".

@@ -44,10 +44,6 @@
   const WARN_AFTER_MS = 4e3;  // edges warm once this much has elapsed
   const URGENT_MS = 3e3;      // remaining time that counts as running out
 
-  const PACK_GROUP = {
-    countries: 'country', territories: 'territory',
-    disputed: 'disputed', orgs: 'org', subnational: 'subdivision',
-  };
   // Every kind still resolves to "four flag records, one is right", so grading
   // and the whole Leitner layer stay untouched. Only the prompt and what is
   // printed on the buttons change.
@@ -233,11 +229,11 @@
 
   // ── scope ───────────────────────────────────────────────────────────────
   function pool(st = store.settings) {
-    const groups = new Set((st.packs || []).map((p) => PACK_GROUP[p]).filter(Boolean));
+    const packs = new Set(st.packs || []);
     const regions = new Set(st.regions || []);
     const tiers = new Set(st.tiers || []);
     return DATA.flags.filter((f) => {
-      if (!groups.has(f.group)) return false;
+      if (!packs.has(f.pack)) return false;
       if (tiers.size && !tiers.has(f.tier)) return false;
       // Entries with no region (orgs, sub-national) are not regional — never
       // filtered out by a region choice.
@@ -245,6 +241,43 @@
       return true;
     });
   }
+
+  // ── lazy packs ──────────────────────────────────────────────────────────
+  // Sub-national sets are far too big to ship in the core bundle, so each is a
+  // separate file fetched the first time it is switched on. The service worker
+  // caches it after that, so it works offline from the second use.
+  const loadedPacks = new Set();
+  let loadingPacks = false;
+
+  async function ensurePacks(ids) {
+    const todo = (ids || []).filter((id) => DATA.packs[id]?.lazy && !loadedPacks.has(id));
+    if (!todo.length) return true;
+    loadingPacks = true;
+    try {
+      for (const id of todo) {
+        const res = await fetch(DATA.packs[id].lazy);
+        if (!res.ok) throw new Error(`${id} ${res.status}`);
+        const p = await res.json();
+        for (const f of p.flags) {
+          if (BY.has(f.code)) continue;
+          DATA.flags.push(f);
+          BY.set(f.code, f);
+        }
+        Object.assign(SVGS, p.svgs);
+        loadedPacks.add(id);
+      }
+      return true;
+    } catch (err) {
+      console.warn('pack load failed', err);
+      toast('Could not load that pack — check your connection');
+      return false;
+    } finally {
+      loadingPacks = false;
+    }
+  }
+
+  const prettyBytes = (n) => (n >= 1048576 ? (n / 1048576).toFixed(1) + ' MB'
+    : Math.round(n / 1024) + ' KB');
 
   // Some modes cannot ask about every flag: Capitals needs a capital on record,
   // Lookalikes needs at least one catalogued twin.
@@ -505,13 +538,36 @@
     // packs
     const pl = $('#packList'); pl.innerHTML = '';
     for (const [id, meta] of Object.entries(DATA.packs)) {
-      const count = DATA.flags.filter((f) => f.group === meta.group).length;
-      const b = chip(meta.label, st.packs.includes(id), count);
-      b.onclick = () => {
+      const on = st.packs.includes(id);
+      const count = meta.lazy && !loadedPacks.has(id)
+        ? meta.count
+        : DATA.flags.filter((f) => f.pack === id).length;
+      const b = chip(meta.label, on, count);
+      // Say up front what switching a big pack on will cost to download.
+      if (meta.lazy && !loadedPacks.has(id)) {
+        const s2 = document.createElement('span');
+        s2.className = 'n dl';
+        s2.textContent = prettyBytes(meta.bytes);
+        b.appendChild(s2);
+      }
+      b.onclick = async () => {
         const i = st.packs.indexOf(id);
-        if (i >= 0) { if (st.packs.length === 1) return toast('Keep at least one pack'); st.packs.splice(i, 1); }
-        else st.packs.push(id);
-        saveStore(); renderSetup(mode);
+        if (i >= 0) {
+          if (st.packs.length === 1) return toast('Keep at least one pack');
+          st.packs.splice(i, 1);
+        } else {
+          if (meta.lazy && !loadedPacks.has(id)) {
+            if (loadingPacks) return;
+            b.classList.add('loading');
+            toast(`Loading ${meta.label}…`, 8000);
+            const ok = await ensurePacks([id]);
+            b.classList.remove('loading');
+            if (!ok) return;
+            $('#toast').hidden = true;
+          }
+          st.packs.push(id);
+        }
+        saveStore(); renderSetup(modeId);
       };
       pl.appendChild(b);
     }
@@ -520,14 +576,14 @@
     const rl = $('#regionList'); rl.innerHTML = '';
     const allOn = st.regions.length === 0;
     const ab = chip('All', allOn);
-    ab.onclick = () => { st.regions = []; saveStore(); renderSetup(mode); };
+    ab.onclick = () => { st.regions = []; saveStore(); renderSetup(modeId); };
     rl.appendChild(ab);
     for (const r of REGIONS) {
       const b = chip(r, st.regions.includes(r));
       b.onclick = () => {
         const i = st.regions.indexOf(r);
         if (i >= 0) st.regions.splice(i, 1); else st.regions.push(r);
-        saveStore(); renderSetup(mode);
+        saveStore(); renderSetup(modeId);
       };
       rl.appendChild(b);
     }
@@ -540,7 +596,7 @@
         const i = st.tiers.indexOf(t);
         if (i >= 0) { if (st.tiers.length === 1) return toast('Keep at least one difficulty'); st.tiers.splice(i, 1); }
         else st.tiers.push(t);
-        saveStore(); renderSetup(mode);
+        saveStore(); renderSetup(modeId);
       };
       tl.appendChild(b);
     }
@@ -549,7 +605,7 @@
     const ll = $('#lengthList'); ll.innerHTML = '';
     for (const n of LENGTHS) {
       const b = chip(String(n), st.length === n);
-      b.onclick = () => { st.length = n; saveStore(); renderSetup(mode); };
+      b.onclick = () => { st.length = n; saveStore(); renderSetup(modeId); };
       ll.appendChild(b);
     }
 
@@ -567,9 +623,16 @@
   }
 
   // ── game ────────────────────────────────────────────────────────────────
-  function startRound(modeId) {
+  async function startRound(modeId) {
     const mode = modeOf(modeId);
     const st = store.settings;
+    // A pack can be enabled from a previous session but not yet fetched.
+    if ((st.packs || []).some((id) => DATA.packs[id]?.lazy && !loadedPacks.has(id))) {
+      toast('Loading packs…', 8000);
+      const ok = await ensurePacks(st.packs);
+      $('#toast').hidden = true;
+      if (!ok) return;
+    }
     const p = eligible(pool(), mode);
     if (p.length < 4) {
       return toast(mode.needs === 'capital' ? 'Not enough flags with capitals in scope'

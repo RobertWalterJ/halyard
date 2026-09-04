@@ -33,10 +33,21 @@ const FILES = [
 const targets = [join(ROOT, 'dist', 'web'), join(ROOT, 'docs')];
 const STAMP = buildStamp();
 
+// Lazy pack files are discovered rather than listed, so adding a pack needs no
+// edit here — but they must still be copied, or enabling one 404s in production.
+const packFiles = (() => {
+  try {
+    return readdirSync(join(APP, 'data', 'packs'))
+      .filter((f) => f.endsWith('.json'))
+      .map((f) => `data/packs/${f}`);
+  } catch { return []; }
+})();
+const ALL = [...FILES, ...packFiles];
+
 let bytes = 0;
 for (const target of targets) {
   rmSync(target, { recursive: true, force: true });
-  for (const rel of FILES) {
+  for (const rel of ALL) {
     const dest = join(target, rel);
     mkdirSync(dirname(dest), { recursive: true });
     copyFileSync(join(APP, rel), dest);
@@ -61,6 +72,6 @@ const swSrc = readdirSync(targets[0]).includes('sw.js');
 if (!swSrc) throw new Error('sw.js missing from the deploy');
 
 console.log('build stamp    :', STAMP);
-console.log('files per copy :', FILES.length);
+console.log('files per copy :', ALL.length, `(${packFiles.length} lazy packs)`);
 console.log('written        :', targets.map((t) => t.replace(ROOT + '\\', '')).join('  +  '));
 console.log('size           :', (bytes / 1024 / 1024).toFixed(2) + 'MB');

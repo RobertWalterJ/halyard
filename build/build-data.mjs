@@ -241,10 +241,15 @@ for (const file of svgFiles) {
   }
   if (UNINHABITED.has(code) && pop == null) pop = 0;
 
+  const CORE_PACK = {
+    country: 'countries', territory: 'territories', disputed: 'disputed',
+    org: 'orgs', subdivision: 'subnational',
+  };
   const rec = {
     code,
     name,
     group,
+    pack: CORE_PACK[group],
     region,
     subregion,
     capital,
@@ -295,6 +300,36 @@ for (const e of entries) {
   e.tier = e.group === 'org' ? 1 : e.group === 'disputed' ? 2 : 3;
 }
 
+// Packs harvested into app/data/packs/ are declared here but NOT inlined: the
+// US states alone are ~7.7MB of detailed seals, four times the whole core
+// bundle. The app fetches a pack the first time it is switched on, and the
+// service worker caches it from then on.
+function corePacks() {
+  const packs = {
+    countries: { label: 'Countries', note: 'Sovereign states' },
+    territories: { label: 'Territories', note: 'Dependencies and overseas territories' },
+    disputed: { label: 'Disputed', note: 'Partially recognised states' },
+    orgs: { label: 'Organisations', note: 'International bodies' },
+    subnational: { label: 'Sub-national', note: 'UK, Spain, St Helena' },
+  };
+  const dir = join(OUT_DATA, 'packs');
+  let files = [];
+  try { files = readdirSync(dir).filter((f) => f.endsWith('.json')); } catch { files = []; }
+  for (const f of files.sort()) {
+    const p = JSON.parse(readFileSync(join(dir, f), 'utf8'));
+    packs[p.pack] = {
+      label: p.label,
+      note: p.note,
+      // Path is resolved against the page, not against flags.json, so it must
+      // be the full path from the app root.
+      lazy: `data/packs/${f}`,
+      count: p.flags.length,
+      bytes: Buffer.byteLength(readFileSync(join(dir, f))),
+    };
+  }
+  return packs;
+}
+
 entries.sort((a, b) => a.name.localeCompare(b.name));
 const tally = (k) => entries.reduce((m, e) => { m[e[k]] = (m[e[k]] || 0) + 1; return m; }, {});
 
@@ -305,13 +340,7 @@ const out = {
     countries: 'world-countries 5.1.0 (ODbL) — github.com/mledoze/countries',
     population: 'World Bank SP.POP.TOTL, most recent year per country',
   },
-  packs: {
-    countries: { label: 'Countries', note: 'Sovereign states', group: 'country' },
-    territories: { label: 'Territories', note: 'Dependencies and overseas territories', group: 'territory' },
-    disputed: { label: 'Disputed', note: 'Partially recognised states', group: 'disputed' },
-    orgs: { label: 'Organisations', note: 'International bodies', group: 'org' },
-    subnational: { label: 'Sub-national', note: 'Seed set — more to come', group: 'subdivision' },
-  },
+  packs: corePacks(),
   flags: entries,
 };
 
