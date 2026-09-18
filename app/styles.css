@@ -38,18 +38,25 @@
   --line-2: #e3d1b6;
   --ink: #241c12;
   --ink-2: #6d5f4e;
-  --ink-3: #9c8d79;
+  --ink-3: #827360;      /* was #9c8d79 — 3.23:1 on paper, below AA */
 
   --orange: #ea6a17;
   --orange-deep: #c8530b;
   --yellow: #ffc42e;
 
-  --good: #1c8b4e;
-  --good-bg: #e7f6ec;
-  --good-line: #9dd6b3;
-  --bad: #d1362c;
-  --bad-bg: #fdeceb;
-  --bad-line: #f0b0ab;
+  /* VERDICT COLOURS, chosen by build/audit-colour.mjs rather than by eye.
+     Green against red is the worst possible pair for the commonest colour
+     blindness: the old #1c8b4e and #d1362c were 1.14:1 in lightness and
+     collapsed to a CIEDE2000 of 10.8 under deuteranopia, and their two washes
+     to 0.5 — which is to say the right-answer wash and the wrong-answer wash
+     were the same colour. Pushing the green towards teal is what buys the
+     separation back; the red barely moves. */
+  --good: #0e7061;
+  --good-bg: #eef9f6;
+  --good-line: #99c5bd;
+  --bad: #c41726;
+  --bad-bg: #ffdad5;
+  --bad-line: #e99092;
 
   --font-display: 'Bricolage Grotesque', 'Segoe UI', system-ui, sans-serif;
   --font-ui: 'Instrument Sans', system-ui, -apple-system, 'Segoe UI', Roboto, sans-serif;
@@ -707,3 +714,24 @@ h1, h2, h3, p { margin: 0; }
   .time-bar-fill, .zoomer { animation-duration: revert !important; }
   .game.urgent::after { animation: none !important; }
 }
+
+/* A MARK, NOT JUST A COLOUR.
+ *
+ * The verdict colours now survive deuteranopia, but colour was the ONLY thing
+ * separating right from wrong — and a palette can be changed back by anyone who
+ * thinks it looks nicer. A tick and a cross cannot be un-seen by a colour-blind
+ * reader, by anyone outdoors in bright sun, or on a phone in a warm night mode.
+ * build/audit-colour.mjs grades these two as 'shape' on the strength of exactly
+ * this rule; delete the marks and the audit's claim stops being true.
+ *
+ * Absolutely positioned, because these option rows are variously flex and grid
+ * and an extra child lands somewhere different in each. aria-hidden by way of
+ * being a pseudo-element, so nothing is read out twice. */
+.ans { position: relative; }
+.ans.correct::after,
+.ans.wrong::after {
+  position: absolute; top: 6px; right: 9px;
+  font-weight: 800; font-size: 1rem; line-height: 1; pointer-events: none;
+}
+.ans.correct::after { content: '✓'; color: var(--good); }
+.ans.wrong::after { content: '✗'; color: var(--bad); }

@@ -10,7 +10,7 @@
   // Stamped at deploy time by build/make-deploy.mjs and build/bundle-single.mjs.
   // Left as the placeholder when running straight from app/, so the Settings
   // screen can honestly say "dev" rather than invent a version.
-  const BUILD = "2026-09-04 19:30 · 93236af";
+  const BUILD = "2026-09-18 09:34 · f5108ba";
 
   // The single-file build inlines its data and has no server behind it, which
   // changes two things: no service worker, and no working file downloads.
