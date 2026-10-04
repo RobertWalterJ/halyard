@@ -5,7 +5,7 @@
    first time — you would keep running old code until the cache name changed.
    Network-first means the app is always current when the server is reachable
    and still works completely offline when it is not. */
-const CACHE = 'halyard-v14';
+const CACHE = 'halyard-v15';
 
 // Deliberately NOT listing data/packs/*.json here. The sub-national packs are
 // several megabytes and most people will never switch them on; precaching them
@@ -40,7 +40,7 @@ self.addEventListener('install', (e) => {
 self.addEventListener('activate', (e) => {
   e.waitUntil(
     caches.keys()
-      .then((keys) => Promise.all(keys.filter((k) => k !== CACHE).map((k) => caches.delete(k))))
+      .then((keys) => Promise.all(keys.filter((k) => k.startsWith('halyard-') && k !== CACHE).map((k) => caches.delete(k))))
       .then(() => self.clients.claim())
   );
 });
@@ -60,8 +60,8 @@ self.addEventListener('fetch', (e) => {
         return res;
       })
       .catch(() =>
-        caches.match(req, { ignoreSearch: true })
-          .then((hit) => hit || caches.match('index.html'))
+        caches.open(CACHE).then((c) => c.match(req, { ignoreSearch: true }))
+          .then((hit) => hit || caches.open(CACHE).then((c) => c.match('index.html')))
       )
   );
 });
